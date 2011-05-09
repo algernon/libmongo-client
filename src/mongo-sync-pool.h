@@ -20,6 +20,10 @@
 #include <mongo-sync.h>
 #include <glib.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** @defgroup mongo_sync_pool_api Mongo Sync Pool API
  *
  * These commands implement connection pooling over the mongo_sync
@@ -116,5 +120,9 @@ gboolean mongo_sync_pool_return (mongo_sync_pool *pool,
 				 mongo_sync_pool_connection *conn);
 
 /** @} */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

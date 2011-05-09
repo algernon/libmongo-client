@@ -21,6 +21,10 @@
 
 #include <glib.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #if __GNUC__ >= 4
 #define GNUC_SENTINEL __attribute__((sentinel))
 #else
@@ -442,5 +446,9 @@ gboolean mongo_sync_cmd_authenticate (mongo_sync_connection *conn,
 				      const gchar *pw);
 
 /** @} */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

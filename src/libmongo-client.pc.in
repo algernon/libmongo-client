@@ -9,4 +9,4 @@ Description: MongoDB client library
 URL: https://github.com/algernon/libmongo-client
 Requires.private: glib-2.0 @openssl_pc@
 Libs: -L${libdir} -lmongo-client
-Cflags: -I${includedir}/libmongo-client
+Cflags: -I${includedir}/mongo-client

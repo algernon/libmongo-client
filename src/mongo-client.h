@@ -22,6 +22,10 @@
 
 #include <glib.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** @defgroup mongo_client Mongo Client
  *
  * @addtogroup mongo_client
@@ -79,5 +83,9 @@ mongo_packet *mongo_packet_recv (mongo_connection *conn);
 gint32 mongo_connection_get_requestid (const mongo_connection *conn);
 
 /** @} */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

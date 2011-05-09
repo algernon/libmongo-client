@@ -19,6 +19,10 @@
 
 #include <glib.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** @defgroup mongo_util Mongo Utils
  *
  * Various utility functions related to MongoDB.
@@ -97,5 +101,9 @@ gboolean mongo_util_parse_addr (const gchar *addr, gchar **host,
 				gint *port);
 
 /** @} */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

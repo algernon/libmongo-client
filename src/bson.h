@@ -19,6 +19,10 @@
 
 #include <glib.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** @defgroup bson_mod BSON
  *
  * The types, functions and everything else within this module is
@@ -772,5 +776,9 @@ gboolean bson_cursor_get_int64 (const bson_cursor *c, gint64 *dest);
 /** @} */
 
 /** @} */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
