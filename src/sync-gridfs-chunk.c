@@ -320,5 +320,7 @@ mongo_sync_gridfs_chunked_file_new_from_buffer (mongo_sync_gridfs *gfs,
   bson_cursor_get_string (c, &gfile->meta.md5);
   bson_cursor_free (c);
 
+  g_free (oid);
+
   return gfile;
 }
