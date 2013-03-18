@@ -139,10 +139,13 @@ mongo_sync_gridfs_chunked_file_cursor_new (mongo_sync_gridfs_chunked_file *gfile
       errno = EINVAL;
       return NULL;
     }
-
-  q = bson_new_sized (32);
-  bson_append_oid (q, "files_id", gfile->meta.oid);
-  bson_finish (q);
+  
+  q = bson_build_full (BSON_TYPE_DOCUMENT, "$query", TRUE,
+                         bson_build (BSON_TYPE_OID, "files_id", gfile->meta.oid, BSON_TYPE_NONE),
+                       BSON_TYPE_DOCUMENT, "$orderby", TRUE,
+                         bson_build (BSON_TYPE_INT32, "n", 1, BSON_TYPE_NONE),
+                       BSON_TYPE_NONE);
+  bson_finish (q);  
 
   p = mongo_sync_cmd_query (gfile->gfs->conn, gfile->gfs->ns.chunks, 0,
 			    start, num, q, NULL);
