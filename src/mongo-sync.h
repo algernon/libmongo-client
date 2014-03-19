@@ -50,6 +50,51 @@ G_BEGIN_DECLS
 /** Opaque synchronous connection object. */
 typedef struct _mongo_sync_connection mongo_sync_connection;
 
+/** synchronous connection recovery cache object */
+typedef struct _mongo_sync_conn_recovery_cache mongo_sync_conn_recovery_cache;
+
+/** Initialize a connection recovery cache object.
+ *
+ * @param cache is the recovery cache object
+ */
+void mongo_sync_conn_recovery_cache_init(mongo_sync_conn_recovery_cache *cache);
+
+/** Discards a connection recovery cache object.
+ *
+ * @param cache is the recovery cache object
+ */
+void mongo_sync_conn_recovery_cache_discard(mongo_sync_conn_recovery_cache *cache);
+
+/** Add a seed to a connection recovery cache object
+ *
+ * The seed list will be used for reconnects, prioritized before the
+ * automatically discovered host list.
+ *
+ * @param cache is the connection recovery cache to add a seed to.
+ * @param host is the seed host to add.
+ * @param port is the seed's port.
+ *
+ * @returns TRUE on success, FALSE otherwise.
+ */
+gboolean mongo_sync_conn_recovery_cache_seed_add(mongo_sync_conn_recovery_cache *cache,
+                                                 const gchar *host, gint port);
+
+/** Synchronously connect to a MongoDB server using an external
+ *  connection recovery cache object
+ *
+ * Sets up a synchronous connection to a MongoDB server.
+ *
+ * @param cache is the externally managed connection recovery cache object.
+ * @param slaveok signals whether queries made against a slave are
+ * acceptable.
+ *
+ * @returns A newly allocated mongo_sync_connection object, or NULL on
+ * error. It is the responsibility of the caller to close and free the
+ * connection when appropriate.
+ */
+mongo_sync_connection *mongo_sync_connect_recovery_cache(mongo_sync_conn_recovery_cache *cache,
+                                                         gboolean slaveok);
+
 /** Synchronously connect to a MongoDB server.
  *
  * Sets up a synchronous connection to a MongoDB server.

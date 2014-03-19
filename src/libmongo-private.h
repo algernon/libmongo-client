@@ -41,6 +41,30 @@ struct _mongo_connection
   gint32 request_id; /**< The last sent command's requestID. */
 };
 
+
+/** @internal Mongo Replica Set object. */
+typedef struct _replica_set
+{
+  GList *seeds; /**< Replica set seeds, as a list of strings. */
+  GList *hosts; /**< Replica set members, as a list of strings. */
+  gchar *primary; /**< The replica master, if any. */
+} replica_set;  /**< Replica Set properties. */
+
+/** @internal MongoDb Authentication Credentials object. */
+typedef struct _auth_credentials
+{
+  gchar *db; /**< The database to authenticate against. */
+  gchar *user; /**< The username to authenticate with. */
+  gchar *pw; /**< The password to authenticate with. */
+} auth_credentials; /**< Authentication credentials. These are mlock()'ed. */
+
+/** @internal Connection Recovery Cache for MongoDb. */
+struct _mongo_sync_conn_recovery_cache
+{
+  replica_set rs;  /**< The replica set. */
+  auth_credentials auth; /**< The authentication credentials.*/
+};
+
 /** @internal Synchronous connection object. */
 struct _mongo_sync_connection
 {
@@ -50,24 +74,16 @@ struct _mongo_sync_connection
   gboolean safe_mode; /**< Safe-mode signal flag. */
   gboolean auto_reconnect; /**< Auto-reconnect flag. */
 
-  struct
-  {
-    GList *seeds; /**< Replica set seeds, as a list of strings. */
-    GList *hosts; /**< Replica set members, as a list of strings. */
-    gchar *primary; /**< The replica master, if any. */
-  } rs;  /**< Replica Set properties. */
-
   gchar *last_error; /**< The last error from the server, caught
                         during queries. */
   gint32 max_insert_size; /**< Maximum number of bytes an insert
                              command can be before being split to
                              smaller chunks. Used for bulk inserts. */
-  struct
-  {
-    gchar *db; /**< The database to authenticate against. */
-    gchar *user; /**< The username to authenticate with. */
-    gchar *pw; /**< The password to authenticate with. */
-  } auth; /**< Authentication credentials. These are mlock()'ed. */
+  
+  replica_set rs; /**< Replica set. */
+  auth_credentials auth; /**< Authentication credentials. */
+
+  mongo_sync_conn_recovery_cache *recovery_cache; /**< Reference to the externally managed recovery cache. */
 };
 
 /** @internal MongoDB cursor object.

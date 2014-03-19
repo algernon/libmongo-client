@@ -28,9 +28,46 @@
 #include <unistd.h>
 #include <sys/mman.h>
 
-mongo_sync_connection *
-mongo_sync_connect (const gchar *address, gint port,
-                    gboolean slaveok)
+static void
+_recovery_cache_store(mongo_sync_conn_recovery_cache *cache,
+                      mongo_sync_connection *conn)
+{
+  cache->rs.seeds = conn->rs.seeds;
+  cache->rs.hosts = conn->rs.hosts;
+  cache->rs.primary = conn->rs.primary;
+  cache->auth.db = conn->auth.db;
+  cache->auth.user = conn->auth.user;
+  cache->auth.pw = conn->auth.pw;
+}
+
+static void
+_recovery_cache_load(mongo_sync_conn_recovery_cache *cache,
+                     mongo_sync_connection *conn)
+{
+  conn->rs.seeds = cache->rs.seeds;
+  conn->rs.hosts = cache->rs.hosts;
+  conn->rs.primary = cache->rs.primary;
+  conn->auth.db = cache->auth.db;
+  conn->auth.user = cache->auth.user;
+  conn->auth.pw = cache->auth.pw;
+  conn->recovery_cache = cache;
+}
+
+static void
+_mongo_sync_conn_init(mongo_sync_connection *conn, gboolean slaveok)
+{
+  conn->slaveok = slaveok;
+  conn->safe_mode = FALSE;
+  conn->auto_reconnect = FALSE;
+  conn->last_error = NULL;
+  conn->max_insert_size = MONGO_SYNC_DEFAULT_MAX_INSERT_SIZE;
+  conn->recovery_cache = NULL;
+}
+
+static mongo_sync_connection *
+_recovery_cache_connect (mongo_sync_conn_recovery_cache *cache,
+                         const gchar *address, gint port,
+                         gboolean slaveok)
 {
   mongo_sync_connection *s;
   mongo_connection *c;
@@ -40,20 +77,30 @@ mongo_sync_connect (const gchar *address, gint port,
     return NULL;
   s = g_realloc (c, sizeof (mongo_sync_connection));
 
-  s->slaveok = slaveok;
-  s->safe_mode = FALSE;
-  s->auto_reconnect = FALSE;
-  s->rs.seeds = g_list_append (NULL, g_strdup_printf ("%s:%d", address, port));
-  s->rs.hosts = NULL;
-  s->rs.primary = NULL;
-  s->last_error = NULL;
-  s->max_insert_size = MONGO_SYNC_DEFAULT_MAX_INSERT_SIZE;
+  _mongo_sync_conn_init(s, slaveok);
 
-  s->auth.db = NULL;
-  s->auth.user = NULL;
-  s->auth.pw = NULL;
+  if (!cache)
+    {
+      s->rs.seeds = g_list_append (NULL, g_strdup_printf ("%s:%d", address, port));
+      s->rs.hosts = NULL;
+      s->rs.primary = NULL;
+      s->auth.db = NULL;
+      s->auth.user = NULL;
+      s->auth.pw = NULL;
+    }
+  else
+    {
+      _recovery_cache_load(cache, s);
+    }
 
   return s;
+}
+
+mongo_sync_connection *
+mongo_sync_connect (const gchar *address, gint port,
+                    gboolean slaveok)
+{
+  return _recovery_cache_connect(NULL, address, port, slaveok);
 }
 
 mongo_sync_connection *
@@ -96,43 +143,50 @@ _mongo_sync_connect_replace (mongo_sync_connection *old,
   if (!old || !new)
     return;
 
-  g_free (old->rs.primary);
-
-  /* Delete the host list. */
-  l = old->rs.hosts;
-  while (l)
+  if (!old->recovery_cache)
     {
-      g_free (l->data);
-      l = g_list_delete_link (l, l);
-    }
-  old->rs.hosts = NULL;
+      g_free (old->rs.primary);
+      old->rs.primary = NULL;
 
+      /* Delete the host list. */
+      l = old->rs.hosts;
+      while (l)
+        {
+          g_free (l->data);
+          l = g_list_delete_link (l, l);
+        }
+      old->rs.hosts = NULL;
+      /* Free the replicaset struct in the new connection. These aren't
+         copied, in order to avoid infinite loops. */
+      l = new->rs.hosts;
+      while (l)
+        {
+          g_free (l->data);
+          l = g_list_delete_link (l, l);
+        }
+      l = new->rs.seeds;
+      while (l)
+        {
+          g_free (l->data);
+          l = g_list_delete_link (l, l);
+        }
+      g_free (new->rs.primary);
+    }
+  else
+    {
+      mongo_sync_conn_recovery_cache_discard(old->recovery_cache);
+    }
+
+  g_free (new->last_error);
   if (old->super.fd)
     close (old->super.fd);
 
   old->super.fd = new->super.fd;
   old->super.request_id = -1;
   old->slaveok = new->slaveok;
-  old->rs.primary = NULL;
   g_free (old->last_error);
   old->last_error = NULL;
 
-  /* Free the replicaset struct in the new connection. These aren't
-     copied, in order to avoid infinite loops. */
-  l = new->rs.hosts;
-  while (l)
-    {
-      g_free (l->data);
-      l = g_list_delete_link (l, l);
-    }
-  l = new->rs.seeds;
-  while (l)
-    {
-      g_free (l->data);
-      l = g_list_delete_link (l, l);
-    }
-  g_free (new->rs.primary);
-  g_free (new->last_error);
   g_free (new);
 }
 
@@ -175,7 +229,7 @@ mongo_sync_reconnect (mongo_sync_connection *conn,
     {
       if (mongo_util_parse_addr (conn->rs.primary, &host, &port))
         {
-          nc = mongo_sync_connect (host, port, conn->slaveok);
+          nc = _recovery_cache_connect (conn->recovery_cache, host, port, conn->slaveok);
           g_free (host);
           if (nc)
             {
@@ -207,7 +261,7 @@ mongo_sync_reconnect (mongo_sync_connection *conn,
       if (!mongo_util_parse_addr (addr, &host, &port))
         continue;
 
-      nc = mongo_sync_connect (host, port, conn->slaveok);
+      nc = _recovery_cache_connect (conn->recovery_cache, host, port, conn->slaveok);
       g_free (host);
       if (!nc)
         continue;
@@ -235,8 +289,13 @@ mongo_sync_reconnect (mongo_sync_connection *conn,
       if (!mongo_util_parse_addr (addr, &host, &port))
         continue;
 
-      nc = mongo_sync_connect (host, port, conn->slaveok);
+      nc = _recovery_cache_connect (conn->recovery_cache,
+                           host,
+                           port,
+                           conn->slaveok);
+
       g_free (host);
+
       if (!nc)
         continue;
 
@@ -273,23 +332,14 @@ _mongo_auth_prop_destroy (gchar **prop)
   *prop = NULL;
 }
 
-void
-mongo_sync_disconnect (mongo_sync_connection *conn)
+static void
+_replica_set_free(replica_set *rs)
 {
   GList *l;
-
-  if (!conn)
-    return;
-
-  _mongo_auth_prop_destroy (&conn->auth.db);
-  _mongo_auth_prop_destroy (&conn->auth.user);
-  _mongo_auth_prop_destroy (&conn->auth.pw);
-
-  g_free (conn->rs.primary);
-  g_free (conn->last_error);
+  g_free (rs->primary);
 
   /* Delete the host list. */
-  l = conn->rs.hosts;
+  l = rs->hosts;
   while (l)
     {
       g_free (l->data);
@@ -297,11 +347,36 @@ mongo_sync_disconnect (mongo_sync_connection *conn)
     }
 
   /* Delete the seed list. */
-  l = conn->rs.seeds;
+  l = rs->seeds;
   while (l)
     {
       g_free (l->data);
       l = g_list_delete_link (l, l);
+    }
+
+  rs->hosts = NULL;
+  rs->seeds = NULL;
+}
+
+void
+mongo_sync_disconnect (mongo_sync_connection *conn)
+{
+  if (!conn)
+    return;
+
+  g_free (conn->last_error);
+
+  if (!conn->recovery_cache)
+    {
+      _mongo_auth_prop_destroy (&conn->auth.db);
+      _mongo_auth_prop_destroy (&conn->auth.user);
+      _mongo_auth_prop_destroy (&conn->auth.pw);
+
+      _replica_set_free(&conn->rs);
+    }
+  else
+    {
+      _recovery_cache_store(conn->recovery_cache, conn);
     }
 
   mongo_disconnect ((mongo_connection *)conn);
@@ -1696,7 +1771,7 @@ mongo_sync_cmd_authenticate (mongo_sync_connection *conn,
   _mongo_auth_prop_destroy (&conn->auth.pw);
   conn->auth.pw = npw;
   mlock (conn->auth.pw, strlen (npw));
-
+  
   return TRUE;
 }
 
@@ -1906,4 +1981,97 @@ mongo_sync_cmd_index_drop_all (mongo_sync_connection *conn,
                                const gchar *ns)
 {
   return _mongo_sync_cmd_index_drop (conn, ns, "*");
+}
+
+void
+mongo_sync_conn_recovery_cache_init(mongo_sync_conn_recovery_cache *cache)
+{
+  cache->auth.db = NULL;
+  cache->auth.user = NULL;
+  cache->auth.pw = NULL;
+
+  cache->rs.hosts = NULL;
+  cache->rs.seeds = NULL;
+  cache->rs.primary = NULL;
+}
+
+void
+mongo_sync_conn_recovery_cache_discard(mongo_sync_conn_recovery_cache *cache)
+{
+  _mongo_auth_prop_destroy (&cache->auth.db);
+  _mongo_auth_prop_destroy (&cache->auth.user);
+  _mongo_auth_prop_destroy (&cache->auth.pw);
+
+  _replica_set_free(&cache->rs);
+}
+
+gboolean
+mongo_sync_conn_recovery_cache_seed_add(mongo_sync_conn_recovery_cache *cache,
+                                 const gchar *host,
+                                 gint port)
+{
+  if (!host || port < 0)
+    {
+      errno = EINVAL;
+      return FALSE;
+    }
+
+  cache->rs.seeds = g_list_append (cache->rs.seeds, g_strdup_printf ("%s:%d", host, port));
+
+  return TRUE;
+}
+
+static mongo_sync_connection *
+_recovery_cache_pick_connect_from_list(mongo_sync_conn_recovery_cache *cache,
+                                       GList *address_list,
+                                       gboolean slaveok)
+{
+  gint i, port;
+  gchar *host;
+  mongo_sync_connection *c = NULL;
+
+  if (address_list)
+    {
+      for (i = 0; i < g_list_length (address_list); i++)
+        {
+          gchar *addr = (gchar *)g_list_nth_data (address_list, i);
+          int e;
+
+          if (!mongo_util_parse_addr (addr, &host, &port))
+            continue;
+
+          c = _recovery_cache_connect (cache, host, port, slaveok);
+          g_free (host);
+          if (c)
+            {
+              return slaveok ? c : mongo_sync_reconnect(c, !slaveok);
+            }
+        }
+    }
+
+  return NULL;
+}
+
+mongo_sync_connection *
+mongo_sync_connect_recovery_cache(mongo_sync_conn_recovery_cache *cache,
+                                  gboolean slaveok)
+{
+  mongo_sync_connection *c = NULL;
+  gchar *host;
+  gint port;
+
+  if (cache->rs.primary && mongo_util_parse_addr (cache->rs.primary, &host, &port))
+    {
+      if ( (c = _recovery_cache_connect (cache, host, port, slaveok)) )
+        {
+          return slaveok ? c : mongo_sync_reconnect(c, !slaveok);
+        }
+    }
+
+  c = _recovery_cache_pick_connect_from_list(cache, cache->rs.seeds, slaveok);
+  
+  if (!c)
+    c = _recovery_cache_pick_connect_from_list(cache, cache->rs.hosts, slaveok);
+
+  return c;
 }
