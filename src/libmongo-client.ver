@@ -158,4 +158,5 @@ LMC_0.1.8 {
   mongo_sync_conn_recovery_cache_discard;
   mongo_sync_conn_recovery_cache_seed_add;
   mongo_sync_connect_recovery_cache;
+  mongo_sync_conn_get_last_error;
 } LMC_0.1.7;

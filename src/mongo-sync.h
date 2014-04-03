@@ -609,6 +609,14 @@ gboolean mongo_sync_cmd_index_drop (mongo_sync_connection *conn,
 gboolean mongo_sync_cmd_index_drop_all (mongo_sync_connection *conn,
                                         const gchar *ns);
 
+/** Get the last error message on a connection
+ * 
+ * @param conn is the connection
+ *
+ * @returns pointer to the error message, if exists, NULL otherwise
+*/
+const gchar *mongo_sync_conn_get_last_error (mongo_sync_connection *conn);
+
 /** @} */
 
 G_END_DECLS

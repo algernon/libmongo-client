@@ -13,6 +13,7 @@ test_func_mongo_sync_write_error (void)
 {
   mongo_sync_connection *conn;
   bson *b;
+  gchar *error_msg;
 
   b = bson_new ();
   bson_append_int32 (b, "f_sync_write_error", 1);
@@ -27,6 +28,10 @@ test_func_mongo_sync_write_error (void)
   ok (mongo_sync_cmd_insert (conn, INVALID_NS, b, NULL) == TRUE,
       "Inserting works with invalid namespace when safe mode is off");
 
+  error_msg = mongo_sync_conn_get_last_error (conn);
+  ok (error_msg == NULL, 
+      "When safe mode is off, there is no error msg, even if ns is invalid.");
+
   ok (mongo_sync_conn_set_safe_mode (conn, TRUE) == TRUE,
       "Setting safe mode works.");
 
@@ -36,7 +41,12 @@ test_func_mongo_sync_write_error (void)
   ok (mongo_sync_cmd_insert (conn, INVALID_NS, b, NULL) == FALSE,
       "Inserting fails with invalid namespace when safe mode is on");
 
+  error_msg = mongo_sync_conn_get_last_error (conn);
+
+  ok (error_msg != NULL,
+      "Inserting failed in safe mode, so we should have an error msg");
+
   mongo_sync_disconnect (conn);
 }
 
-RUN_NET_TEST (5, func_mongo_sync_write_error);
+RUN_NET_TEST (7, func_mongo_sync_write_error);

@@ -15,6 +15,7 @@ test_func_mongo_sync_auto_reconnect_cache (void)
   mongo_packet *p;
   GList *hosts;
   gchar *primary_addr;
+  gchar *error_msg;
 
   primary_addr = g_strdup_printf ("%s:%d", config.primary_host, config.primary_port);
 
@@ -40,11 +41,20 @@ test_func_mongo_sync_auto_reconnect_cache (void)
       "Inserting fails with auto-reconnect turned off, and a broken "
       "connection");
 
+  error_msg = mongo_sync_conn_get_last_error (conn);
+
+  ok (error_msg != NULL, "We have an error msg when insert fails.");
+
   mongo_sync_conn_set_auto_reconnect (conn, TRUE);
 
   ok (mongo_sync_cmd_insert (conn, config.ns, b, NULL) == TRUE,
       "Inserting works with auto-reconnect turned on, and a broken "
       "connection");
+  
+  error_msg = mongo_sync_conn_get_last_error (conn);
+
+  ok (error_msg == NULL,
+      "After a succesful insert we shouldn't have an error msg.");
 
   mongo_sync_conn_set_auto_reconnect (conn, FALSE);
 
@@ -64,10 +74,17 @@ test_func_mongo_sync_auto_reconnect_cache (void)
   ok (p == NULL,
       "Query fails with auto-reconnect turned off");
 
+  error_msg = mongo_sync_conn_get_last_error(conn);
+  ok (error_msg != NULL, "We have an error msg after a failure query.");  
+
   mongo_sync_conn_set_auto_reconnect (conn, TRUE);
   p = mongo_sync_cmd_query (conn, config.ns, 0, 0, 1, b, NULL);
   ok (p != NULL,
       "Query does reconnect with auto-reconnect turned on");
+ 
+  ok (mongo_sync_conn_get_last_error(conn) == NULL,
+      "We shouldn't have any error messages after a successful operation.");
+ 
   mongo_wire_packet_free (p);
 
   hosts = conn->rs.hosts;
@@ -93,4 +110,4 @@ test_func_mongo_sync_auto_reconnect_cache (void)
   g_free (primary_addr);
 }
 
-RUN_NET_TEST (9, func_mongo_sync_auto_reconnect_cache);
+RUN_NET_TEST (13, func_mongo_sync_auto_reconnect_cache);
