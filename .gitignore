@@ -35,3 +35,4 @@ Makefile
 /b/
 /.pc/
 /stamp-h1
+*.dirstamp

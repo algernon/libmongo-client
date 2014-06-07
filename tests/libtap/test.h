@@ -5,6 +5,7 @@
 #include "bson.h"
 #include "mongo-wire.h"
 #include "mongo-sync.h"
+#include "mongo-ssl.h"
 #include "libmongo-private.h"
 
 #include <dlfcn.h>
@@ -16,6 +17,8 @@ typedef struct
 
   gchar *secondary_host;
   gint secondary_port;
+
+  mongo_ssl_ctx *ssl_settings;
 
   gchar *db;
   gchar *coll;

@@ -26,3 +26,12 @@ to a *secondary* node by setting the `TEST_SECONDARY' environment
 variable:
 
   $ TEST_SECONDARY="127.0.0.1:27018"; export TEST_SECONDARY
+
+Environment vairables relevant for SSL configuration (SSL tests):
+ 
+ SSL_CERT_PATH, SSL_CA_PATH, SSL_KEY_PATH, SSL_KEY_PW, SSL_CRL_PATH
+
+Run "source ./ssl/env_setup" to automatically setup environment for SSL testing.
+By default these tests SHOULD FAIL because the CRL file specified revokes the server's
+certificate - proving that CRL check works. Use "unset SSL_CRL_PATH" to 
+prevent CRL check.

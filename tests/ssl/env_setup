@@ -1,0 +1,13 @@
+# usage: $ source env_setup
+# Original
+#export SSL_CA_PATH="./ssl/certs/mongodb.pem"
+#export SSL_CERT_PATH="./ssl/certs/client.pem"
+#export SSL_KEY_PATH="./ssl/certs/client.pem"
+#export SSL_KEY_PW="test_client"
+export TEST_PRIMARY="127.0.0.1:27017"
+
+# Development
+export SSL_CA_PATH="./ssl/3party/ca.pem"
+export SSL_CERT_PATH="./ssl/3party/client_full.pem"
+export SSL_KEY_PATH="./ssl/3party/client_full.pem"
+export SSL_CRL_PATH="./ssl/3party/ca_crl.pem"

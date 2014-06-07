@@ -119,6 +119,12 @@ mongo_sync_connection *mongo_sync_connect (const gchar *address,
                                            gint port,
                                            gboolean slaveok);
 
+
+mongo_sync_connection *mongo_sync_ssl_connect (const gchar *address,
+                                               gint port,
+                                               gboolean slaveok,
+                                               mongo_ssl_ctx *ssl_config);
+
 /** Add a seed to an existing MongoDB connection.
  *
  * The seed list will be used for reconnects, prioritized before the

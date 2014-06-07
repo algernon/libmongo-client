@@ -1,0 +1,8 @@
+ * SNI: Add SubjectAltNames X509 v3 extension support
+ * CRL: Download CRL via HTTP from the distribution point provided by the certificate
+ * OCSP: Add OCSP support
+ * SSL: Add session resumption support
+ * Create a complex SSL test case
+ * Sometimes (it does not seem deterministic right now) f_sync_pool fails for some reason (using MongoDB v2.6.0)
+ * Check for memory leaks, etc.
+ * Write documentation

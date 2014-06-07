@@ -11,6 +11,7 @@ libmongo_client_la_SOURCES	= \
 	compat.c compat.h \
 	bson.c bson.h \
 	mongo-wire.c mongo-wire.h \
+    mongo-ssl.c mongo-ssl.h \
 	mongo-client.c mongo-client.h \
 	mongo-utils.c mongo-utils.h \
 	mongo-sync.c mongo-sync.h \

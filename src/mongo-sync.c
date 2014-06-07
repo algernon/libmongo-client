@@ -28,6 +28,8 @@
 #include <unistd.h>
 #include <sys/mman.h>
 
+#include <stdio.h> // TODO: Temporary, only for debug purposes !!
+
 static void
 _list_free_full (GList **list)
 {
@@ -208,12 +210,50 @@ _recovery_cache_connect (mongo_sync_conn_recovery_cache *cache,
   return s;
 }
 
+static mongo_sync_connection *
+_recovery_cache_ssl_connect (mongo_sync_conn_recovery_cache *cache,
+                         const gchar *address, gint port,
+                         gboolean slaveok, 
+                         mongo_ssl_ctx *ssl)
+{
+  mongo_sync_connection *s;
+  mongo_connection *c;
+
+  c = mongo_ssl_connect (address, port, ssl);
+  if (!c)
+    return NULL;
+  s = g_realloc (c, sizeof (mongo_sync_connection));
+
+  _mongo_sync_conn_init (s, slaveok);
+
+  if (!cache)
+    {
+      s->rs.seeds = g_list_append (NULL, g_strdup_printf ("%s:%d", address, port));
+    }
+  else
+    {
+      _recovery_cache_load (cache, s);
+    }
+
+  return s;
+}
+
 mongo_sync_connection *
 mongo_sync_connect (const gchar *address, gint port,
                     gboolean slaveok)
 {
   return _recovery_cache_connect (NULL, address, port, slaveok);
 }
+
+mongo_sync_connection *mongo_sync_ssl_connect (const gchar *address,
+                                               gint port,
+                                               gboolean slaveok,
+                                               mongo_ssl_ctx *ssl_config)
+{
+  return _recovery_cache_ssl_connect (NULL, address, port, slaveok, ssl_config);
+}
+
+
 
 mongo_sync_connection *
 mongo_sync_connect_0_1_0 (const gchar *host, gint port,
@@ -271,12 +311,27 @@ _mongo_sync_connect_replace (mongo_sync_connection *old,
     close (old->super.fd);
 
   old->super.fd = new->super.fd;
+  old->super.ssl = new->super.ssl;
   old->super.request_id = -1;
   old->slaveok = new->slaveok;
   g_free (old->last_error);
   old->last_error = NULL;
 
   g_free (new);
+}
+
+static gboolean
+_is_ssl (mongo_sync_connection *conn)
+{
+  //if (conn == NULL) return FALSE;
+  //if (conn->super == NULL) return FALSE;
+  
+  if (conn->super.ssl != NULL) 
+    if (conn->super.ssl->super != NULL) 
+        return TRUE;
+
+
+  return FALSE;
 }
 
 mongo_sync_connection *
@@ -318,7 +373,10 @@ mongo_sync_reconnect (mongo_sync_connection *conn,
     {
       if (mongo_util_parse_addr (conn->rs.primary, &host, &port))
         {
-          nc = mongo_sync_connect (host, port, conn->slaveok);
+          if (!_is_ssl (conn)) 
+            nc = mongo_sync_connect (host, port, conn->slaveok); 
+          else 
+            nc = mongo_sync_ssl_connect (host, port, conn->slaveok, conn->super.ssl->super);
 
           g_free (host);
           if (nc)
@@ -351,7 +409,11 @@ mongo_sync_reconnect (mongo_sync_connection *conn,
       if (!mongo_util_parse_addr (addr, &host, &port))
         continue;
 
-      nc = mongo_sync_connect (host, port, conn->slaveok);
+      if (!_is_ssl (conn))
+        nc = mongo_sync_connect (host, port, conn->slaveok);
+      else
+        nc = mongo_sync_ssl_connect (host, port, conn->slaveok, conn->super.ssl->super);
+
       g_free (host);
       if (!nc)
         continue;
@@ -379,7 +441,10 @@ mongo_sync_reconnect (mongo_sync_connection *conn,
       if (!mongo_util_parse_addr (addr, &host, &port))
         continue;
 
-      nc = mongo_sync_connect (host, port, conn->slaveok);
+      if (!_is_ssl (conn))
+        nc = mongo_sync_connect (host, port, conn->slaveok);
+      else
+        nc = mongo_sync_ssl_connect (host, port, conn->slaveok, conn->super.ssl->super);
 
       g_free (host);
 
@@ -557,14 +622,19 @@ _mongo_cmd_ensure_conn (mongo_sync_connection *conn,
       if (!mongo_sync_cmd_is_master (conn))
         {
           if (errno == EPROTO)
-            return FALSE;
+            {
+              return FALSE;
+            }
+
           if (!conn->auto_reconnect)
             {
               errno = ENOTCONN;
               return FALSE;
             }
           if (!mongo_sync_reconnect (conn, TRUE))
-            return FALSE;
+            {
+              return FALSE;
+            }
         }
       return TRUE;
     }
@@ -573,7 +643,9 @@ _mongo_cmd_ensure_conn (mongo_sync_connection *conn,
   if (!mongo_sync_cmd_ping (conn))
     {
       if (errno == EPROTO)
-        return FALSE;
+        {
+          return FALSE;
+        }
       if (!conn->auto_reconnect)
         {
           errno = ENOTCONN;

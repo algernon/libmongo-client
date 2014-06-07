@@ -134,6 +134,9 @@ test_env_setup (void)
   config.primary_port = config.secondary_port = 27017;
   config.db = g_strdup ("test");
   config.coll = g_strdup ("libmongo");
+  
+  config.ssl_settings = g_new0 (mongo_ssl_ctx, 1);
+  mongo_ssl_util_init_lib ();
 
   if (getenv ("TEST_DB"))
     {
@@ -160,6 +163,37 @@ test_env_setup (void)
     mongo_util_parse_addr (getenv ("TEST_SECONDARY"), &config.secondary_host,
                            &config.secondary_port);
 
+
+  if (getenv ("SSL_CERT_PATH"))
+    {
+     if (mongo_ssl_conf_init (config.ssl_settings) != 1)
+       return FALSE;
+
+     if (mongo_ssl_conf_set_cert (config.ssl_settings, g_strdup (getenv ("SSL_CERT_PATH"))) != 1)
+       return FALSE;
+
+
+     if (getenv ("SSL_CA_PATH"))
+       {
+         if (mongo_ssl_conf_set_ca (config.ssl_settings, g_strdup (getenv ("SSL_CA_PATH"))) != 1)
+           return FALSE;
+       }
+
+     if (getenv ("SSL_CRL_PATH"))
+       {
+         if (mongo_ssl_conf_set_crl (config.ssl_settings, g_strdup (getenv ("SSL_CRL_PATH"))) != 1)
+           return FALSE;
+       }
+
+     if (getenv ("SSL_KEY_PATH"))
+       {
+        if (mongo_ssl_conf_set_key (config.ssl_settings, g_strdup (getenv ("SSL_KEY_PATH")), 
+                g_strdup (getenv ("SSL_KEY_PW"))) != 1)
+          return FALSE;
+       }
+     else 
+        return FALSE;
+    }
   return TRUE;
 }
 
@@ -172,12 +206,15 @@ test_env_free (void)
   g_free (config.coll);
   g_free (config.ns);
   g_free (config.gfs_prefix);
+  mongo_ssl_conf_clear (config.ssl_settings);
+  g_free (config.ssl_settings);
+  mongo_ssl_util_cleanup_lib ();
 }
 
 void
 test_main_setup (void)
 {
-  #ifndef HAVE_MSG_NOSIGNAL
-  signal(SIGPIPE, SIG_IGN);
-  #endif
+  //#ifndef HAVE_MSG_NOSIGNAL
+  signal(SIGPIPE, SIG_IGN); // BIO_write 
+  //#endif
 }
