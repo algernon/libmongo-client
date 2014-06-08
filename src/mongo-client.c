@@ -40,7 +40,6 @@
 #include <stdlib.h>
 #include <errno.h>
 
-#include <stdio.h> // for debug purposes only, remove after debug phase !!!!
 
 #ifndef HAVE_MSG_NOSIGNAL
 #define MSG_NOSIGNAL 0
@@ -285,7 +284,7 @@ mongo_packet_send (mongo_connection *conn, const mongo_packet *p)
   struct iovec iov[2];
   struct msghdr msg;
   
-  sigset_t sigmask;
+  //sigset_t sigmask;
 
   if (!conn)
     {
@@ -324,11 +323,11 @@ mongo_packet_send (mongo_connection *conn, const mongo_packet *p)
   if (conn->ssl != NULL)
     {
       int err = 0;
-      // FIXME: Ignoring SIGPIPE did not work (wtf??)
-      sigemptyset (&sigmask);
-      sigaddset (&sigmask, SIGPIPE);
+      // UPDATE: SIG_IGN seems to be working now (maybe I fucked something up...)
+      //sigemptyset (&sigmask);
+      //sigaddset (&sigmask, SIGPIPE);
 
-      pthread_sigmask (SIG_BLOCK, &sigmask, NULL);
+      //pthread_sigmask (SIG_BLOCK, &sigmask, NULL);
 
       guint8 *buf = g_new0 (guint8, sizeof(h) + data_size);
       memcpy (buf, iov[0].iov_base, sizeof (h));
