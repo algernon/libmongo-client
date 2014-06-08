@@ -60,7 +60,6 @@ int mongo_ssl_conf_set_crl (mongo_ssl_ctx *ctx, gchar *crl_path);
 int mongo_ssl_conf_set_key (mongo_ssl_ctx *ctx, gchar *key_path, gchar *key_pw); 
 int mongo_ssl_conf_set_ciphers (mongo_ssl_ctx *ctx, gchar *cipher_list);
 int mongo_ssl_set_auto_retry (mongo_ssl_ctx *ctx);
-int mongo_ssl_conf_free (mongo_ssl_ctx *ctx);
 int mongo_ssl_verify_session (SSL *c, BIO *b); 
 
 G_END_DECLS

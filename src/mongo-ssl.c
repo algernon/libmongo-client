@@ -83,7 +83,6 @@ mongo_ssl_set_auto_retry (mongo_ssl_ctx *c)
 void 
 mongo_ssl_util_cleanup_lib () 
 {
-  crypto_deinit_threading ();
   CONF_modules_free ();
   ERR_remove_state (0);
   ENGINE_cleanup ();	
@@ -91,6 +90,7 @@ mongo_ssl_util_cleanup_lib ()
   ERR_free_strings ();
   EVP_cleanup ();
   CRYPTO_cleanup_all_ex_data ();
+  crypto_deinit_threading ();
   mongo_ssl_lib_initialized = FALSE;
 }
 
@@ -478,14 +478,4 @@ mongo_ssl_verify_session (SSL *c, BIO *b) {
     }
 
   return 1;
-}
-
-int 
-mongo_ssl_conf_free (mongo_ssl_ctx *c)
-{
-    assert (c != NULL);
-
-    SSL_CTX_free (c->ctx);
-    g_free (c);
-    return 1;
 }

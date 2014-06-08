@@ -164,7 +164,7 @@ test_env_setup (void)
                            &config.secondary_port);
 
 
-  if (getenv ("SSL_CERT_PATH"))
+  if (getenv ("SSL_CERT_PATH") && strlen (getenv ("SSL_CERT_PATH")) > 0)
     {
      if (mongo_ssl_conf_init (config.ssl_settings) != 1)
        return FALSE;
@@ -173,19 +173,19 @@ test_env_setup (void)
        return FALSE;
 
 
-     if (getenv ("SSL_CA_PATH"))
+     if (getenv ("SSL_CA_PATH") && strlen (getenv ("SSL_CA_PATH")) > 0)
        {
          if (mongo_ssl_conf_set_ca (config.ssl_settings, g_strdup (getenv ("SSL_CA_PATH"))) != 1)
            return FALSE;
        }
 
-     if (getenv ("SSL_CRL_PATH"))
+     if (getenv ("SSL_CRL_PATH") && strlen (getenv ("SSL_CRL_PATH")) > 0)
        {
          if (mongo_ssl_conf_set_crl (config.ssl_settings, g_strdup (getenv ("SSL_CRL_PATH"))) != 1)
            return FALSE;
        }
 
-     if (getenv ("SSL_KEY_PATH"))
+     if (getenv ("SSL_KEY_PATH") && strlen (getenv ("SSL_KEY_PATH")) >0)
        {
         if (mongo_ssl_conf_set_key (config.ssl_settings, g_strdup (getenv ("SSL_KEY_PATH")), 
                 g_strdup (getenv ("SSL_KEY_PW"))) != 1)
