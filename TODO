@@ -1,4 +1,3 @@
- * SNI: Add SubjectAltNames X509 v3 extension support
  * CRL: Download CRL via HTTP from the distribution point provided by the certificate
  * OCSP: Add OCSP support
  * SSL: Add session resumption support

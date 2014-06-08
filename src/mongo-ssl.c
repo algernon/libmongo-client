@@ -16,6 +16,9 @@ static gint mongo_ssl_lock_count;
 
 // FIXME: Some portions come from the syslog-ng source code (to merge or not to merge, that is the question...)
 
+// TODO: check_dn (), check_altnames () = SNI 
+// TODO: rettype int --> gboolean (where only 0 or 1 returned : FALSE = 0, TRUE = (!FALSE)) 
+
 static unsigned long
 ssl_thread_id () 
 {
@@ -65,17 +68,16 @@ crypto_deinit_threading(void)
 int 
 mongo_ssl_set_auto_retry (mongo_ssl_ctx *c)
 {
-    assert (c != NULL);
+  assert (c != NULL);
     
-    if (c->ctx == NULL)
-        {
-         errno = EINVAL;
-         return -1;
-        }
+  if (c->ctx == NULL)
+    {
+      errno = EINVAL;
+      return -1;
+    }
 
-    
-    SSL_CTX_set_mode (c->ctx, SSL_MODE_AUTO_RETRY);
-    return 1;
+  SSL_CTX_set_mode (c->ctx, SSL_MODE_AUTO_RETRY);
+  return 1;
 }
 
 void 
@@ -191,45 +193,45 @@ _file_exists (gchar *path)
 int 
 mongo_ssl_conf_set_ca (mongo_ssl_ctx *c, gchar *ca_path) 
 {
-    assert(c != NULL);
-    assert(c->ctx != NULL);
-    assert(ca_path != NULL);
+  assert(c != NULL);
+  assert(c->ctx != NULL);
+  assert(ca_path != NULL);
 
-    if (!_file_exists (ca_path)) return 0;
+  if (!_file_exists (ca_path)) return 0;
 
-    if (!SSL_CTX_load_verify_locations (c->ctx, ca_path, NULL))
+  if (!SSL_CTX_load_verify_locations (c->ctx, ca_path, NULL))
+    {
+      if (!SSL_CTX_load_verify_locations (c->ctx, NULL, ca_path))
         {
-            if (!SSL_CTX_load_verify_locations (c->ctx, NULL, ca_path))
-                {
-                    c->last_ssl_error = ERR_peek_last_error();
-                    return 0;
-                }
+          c->last_ssl_error = ERR_peek_last_error();
+          return 0;
         }
+    }
 
-    c->ca_path = g_strdup (ca_path);
-    return 1;
+  c->ca_path = g_strdup (ca_path);
+  return 1;
 }
 
 int 
 mongo_ssl_conf_set_cert (mongo_ssl_ctx *c, gchar *cert_path) 
 {
-    assert(c != NULL);
-    assert(c->ctx != NULL);
-    assert(cert_path != NULL);
+  assert(c != NULL);
+  assert(c->ctx != NULL);
+  assert(cert_path != NULL);
 
-    if (!_file_exists (cert_path)) return 0;
+  if (!_file_exists (cert_path)) return 0;
 
-    if (!SSL_CTX_use_certificate_file (c->ctx, cert_path, SSL_FILETYPE_PEM)) 
+  if (!SSL_CTX_use_certificate_file (c->ctx, cert_path, SSL_FILETYPE_PEM)) 
+    {
+      if (!SSL_CTX_use_certificate_chain_file (c->ctx, cert_path)) 
         {
-            if (!SSL_CTX_use_certificate_chain_file (c->ctx, cert_path)) 
-                {
-                    c->last_ssl_error = ERR_peek_last_error ();
-                    return 0;
-                }
+          c->last_ssl_error = ERR_peek_last_error ();
+          return 0;
         }
+    }
 
-    c->cert_path = g_strdup (cert_path);
-    return 1;
+  c->cert_path = g_strdup (cert_path);
+  return 1;
 }
 
 int 
@@ -330,7 +332,7 @@ mongo_ssl_conf_set_ciphers (mongo_ssl_ctx *c, gchar *cipher_list)
 }
 
 
-void
+static void
 _get_dn (X509_NAME *name, GString *dn)
 {
   BIO *bio;
@@ -346,80 +348,136 @@ _get_dn (X509_NAME *name, GString *dn)
 }
 
 
+static gboolean
+check_dn (const X509 *cert, const gchar *target_hostname)
+{
+  gboolean sni_match = FALSE;
+  int i = 0;
+  gchar **dn_parts;
+  gchar **fields;
+  gchar *curr_field, *curr_key, *curr_value;
+  gchar **field_parts;
+  GString *dn;
+
+  dn = g_string_sized_new (128);
+  _get_dn (X509_get_subject_name ((X509*) cert), dn);
+    
+  dn_parts = g_strsplit (dn->str, ",", 0);
+  curr_field = dn_parts[0];
+
+  gchar *_cn = g_locale_to_utf8 ("CN", -1, NULL, NULL, NULL);
+
+  while (curr_field != NULL)
+    {
+      field_parts = g_strsplit (curr_field, "=", 2);
+      curr_key = g_strchomp (field_parts[0]);
+      curr_value = g_strchomp (field_parts[1]);
+      
+      while ((*curr_key) == 0x20) curr_key++;
+      while ((*curr_value) == 0x20) curr_value++;
+
+      if (curr_key == NULL || curr_value == NULL) continue;
+      if (strcmp ((const char*) g_utf8_casefold (curr_key, -1), (const char*) g_utf8_casefold (_cn, -1))== 0)
+        {
+          if (g_pattern_match_simple ((const gchar*) curr_value, (const gchar*) target_hostname))
+            {
+              sni_match = TRUE;
+              g_strfreev (field_parts);
+              break;
+            }
+        }
+  
+      g_strfreev (field_parts);
+      i += 1;
+      curr_field = dn_parts[i];
+    }
+
+  g_strfreev (dn_parts);
+  g_string_free (dn, TRUE);
+
+  return sni_match;
+}
+
+static gboolean
+check_altnames (const X509 *cert, const gchar *target_hostname)
+{
+  int i, num = -1;
+  STACK_OF (GENERAL_NAME) *names = NULL;
+  gboolean sni_match = FALSE;
+
+  names = X509_get_ext_d2i ((X509*) cert, NID_subject_alt_name, NULL, NULL);
+
+  if (names == NULL) return FALSE;
+
+  num = sk_GENERAL_NAME_num (names);
+
+  gchar *t = g_locale_to_utf8 (target_hostname, -1, NULL, NULL, NULL);
+  if (t == NULL) t = (gchar*) target_hostname;
+
+  for (i = 0; i < num; ++i)
+    {
+      const GENERAL_NAME *curr = sk_GENERAL_NAME_value (names, i);
+      if (curr->type == GEN_DNS)
+        {
+          gchar *dns;
+          int dns_len = -1;
+          if ( (dns_len = ASN1_STRING_to_UTF8 ((unsigned char**) &dns, curr->d.dNSName)) < 0) continue;
+          if (dns_len != strlen (dns)) continue;
+          if (g_pattern_match_simple ((const gchar*) dns, (const gchar*) t))
+            {
+              sni_match = TRUE;
+            }
+          
+          OPENSSL_free (dns);
+          if (sni_match) break;
+        }
+    }
+
+  if (t != target_hostname) g_free (t);
+  
+  return sni_match;
+}
+
 int 
 mongo_ssl_verify_session (SSL *c, BIO *b) {
-    assert (c != NULL);
-    assert (b != NULL);
+  assert (c != NULL);
+  assert (b != NULL);
 
-    X509 *cert;
-    GString *dn;
-    char *target_hostname;
-    gchar** dn_parts;
-    gchar** fields;
-    gchar* curr_field, *curr_key, *curr_value;
-    gchar** field_parts;
-
-    gboolean sni_match = FALSE;
-
-    cert = SSL_get_peer_certificate (c);
-
-    if (cert == NULL)
-      {
-        return X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT;
-      }
-    int err, i;
-
-    if ((err = SSL_get_verify_result (c)) != X509_V_OK)
-      {
-        return err;
-      }
-
-    dn = g_string_sized_new (128);
-    _get_dn (X509_get_subject_name (cert), dn);
-    target_hostname = BIO_get_conn_hostname (b);
+  X509 *cert;
+  char *target_hostname;
     
-    dn_parts = g_strsplit (dn->str, ",", 0);
-    curr_field = dn_parts[0];
+  gboolean sni_match = FALSE;
+  int err;
+   
+  cert = SSL_get_peer_certificate (c);
+  target_hostname = BIO_get_conn_hostname (b);
+    
+  if (cert == NULL)
+    {
+      return X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT; // TODO: Find more suitable error code to return 
+    }
 
-    gchar *_cn = g_locale_to_utf8 ("CN", -1, NULL, NULL, NULL);
+  if (target_hostname == NULL)
+    {
+      errno = EINVAL;
+      return -1;
+    }
 
-    i = 0;
-    while (curr_field != NULL)
-      {
-        field_parts = g_strsplit (curr_field, "=", 2);
-        curr_key = g_strchomp (field_parts[0]);
-        curr_value = g_strchomp (field_parts[1]);
-        
-        while ((*curr_key) == 0x20) curr_key++;
-        while ((*curr_value) == 0x20) curr_value++;
 
-        if (curr_key == NULL || curr_value == NULL) continue;
-        if (strcmp ((const char*) g_utf8_casefold (curr_key, -1), (const char*) g_utf8_casefold (_cn, -1))== 0)
-          {
-            if (g_pattern_match_simple ((const gchar*) curr_value, (const gchar*) target_hostname))
-              {
-                sni_match = TRUE;
-                g_strfreev (field_parts);
-                break;
-              }
-          }
+  if ((err = SSL_get_verify_result (c)) != X509_V_OK)
+    {
+      return err;
+    }
 
-          g_strfreev (field_parts);
-          i += 1;
-          curr_field = dn_parts[i];
-      }
+  sni_match = (check_dn (cert, target_hostname)) || (check_altnames (cert, target_hostname));
 
-    g_strfreev (dn_parts);
+  if (! sni_match) 
+    {
+      err = X509_V_ERR_SUBJECT_ISSUER_MISMATCH;
+      return err;
+    }
 
-    if (! sni_match) 
-      {
-        err = X509_V_ERR_SUBJECT_ISSUER_MISMATCH;
-        g_string_free (dn, TRUE);
-        return err;
-      }
-
-    g_string_free (dn, TRUE);
-    return 1;
+  return 1;
 }
 
 int 
