@@ -479,3 +479,11 @@ mongo_ssl_verify_session (SSL *c, BIO *b) {
 
   return 1;
 }
+
+const gchar *
+mongo_ssl_last_error (mongo_ssl_ctx *c)
+{
+  assert (c != NULL);
+  return (const gchar*) ERR_error_string (c->last_ssl_error, NULL);;
+}
+

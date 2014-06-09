@@ -22,11 +22,6 @@
 
 #define MONGO_SSL_CERT_CHAIN_VERIFY_DEPTH 5
 
-//#ifndef debug_print
-//#define debug_print(fmt, ...) \
-//        do { fprintf(stderr, "%s:%d:%s(): " fmt, __FILE__, \
-                                        __LINE__, __func__, ##__VA_ARGS__); } while (0)
-//#endif
 
 G_BEGIN_DECLS
 
@@ -35,7 +30,7 @@ typedef struct {
     gchar *cert_path;
     gchar *crl_path; 
     gchar *key_path;
-    gchar *cipher_list; // not used yet
+    gchar *cipher_list;  
     gchar *key_pw;
     int verify_depth;
 
@@ -61,6 +56,7 @@ int mongo_ssl_conf_set_key (mongo_ssl_ctx *ctx, gchar *key_path, gchar *key_pw);
 int mongo_ssl_conf_set_ciphers (mongo_ssl_ctx *ctx, gchar *cipher_list);
 int mongo_ssl_set_auto_retry (mongo_ssl_ctx *ctx);
 int mongo_ssl_verify_session (SSL *c, BIO *b); 
+const gchar* mongo_ssl_last_error (mongo_ssl_ctx *ctx);
 
 G_END_DECLS
 

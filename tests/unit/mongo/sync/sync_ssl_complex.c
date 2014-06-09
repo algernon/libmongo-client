@@ -107,7 +107,7 @@ test_mongo_sync_cmd_delete_net_ssl (void)
   bson_free (b);
 
   test_mongo_sync_cmd_delete_net_secondary_ssl ();
-
+ 
   end_network_tests ();
 }
 
