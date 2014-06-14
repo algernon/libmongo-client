@@ -24,7 +24,7 @@ test_mongo_sync_reconnect_ssl (void)
 
   mongo_sync_disconnect (conn);
 
-  begin_network_tests (15);
+  begin_ssl_tests (15);
 
   /* Connect & reconnect to master */
   o = conn = mongo_sync_ssl_connect (config.primary_host,
@@ -138,7 +138,7 @@ test_mongo_sync_reconnect_ssl (void)
 
   endskip;
   
-  end_network_tests ();
+  end_ssl_tests ();
 }
 
 RUN_TEST (19, mongo_sync_reconnect_ssl);

@@ -5,6 +5,7 @@
 #export SSL_KEY_PATH="./ssl/certs/client.pem"
 #export SSL_KEY_PW="test_client"
 export TEST_PRIMARY="127.0.0.1:27017"
+export TEST_SECONDARY="127.0.0.1:27019"
 
 # Development
 export SSL_CA_PATH="./ssl/3party/ca.pem"

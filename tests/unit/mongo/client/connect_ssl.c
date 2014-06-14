@@ -14,7 +14,7 @@ test_mongo_connect_ssl (void)
   ok (errno == EINVAL,
       "mongo_connect() should fail with EINVAL if host is NULL");
 
-  begin_network_tests (3);
+  begin_ssl_tests(3);
 
   ok (mongo_ssl_connect ("invalid.example.com", 27017, config.ssl_settings) == NULL,
       "Connecting to an invalid host fails");
@@ -27,8 +27,8 @@ test_mongo_connect_ssl (void)
                           config.primary_port, config.ssl_settings)) != NULL,
       "Connecting to the primary server works");
   mongo_disconnect (c);
-
-  end_network_tests ();
+ 
+ end_ssl_tests ();
 }
 
 RUN_TEST (5, mongo_connect_ssl);

@@ -163,37 +163,53 @@ test_env_setup (void)
     mongo_util_parse_addr (getenv ("TEST_SECONDARY"), &config.secondary_host,
                            &config.secondary_port);
 
-
   if (getenv ("SSL_CERT_PATH") && strlen (getenv ("SSL_CERT_PATH")) > 0)
     {
-     if (mongo_ssl_conf_init (config.ssl_settings) != 1)
-       return FALSE;
-
-     if (mongo_ssl_conf_set_cert (config.ssl_settings, g_strdup (getenv ("SSL_CERT_PATH"))) != 1)
-       return FALSE;
-
-
-     if (getenv ("SSL_CA_PATH") && strlen (getenv ("SSL_CA_PATH")) > 0)
-       {
-         if (mongo_ssl_conf_set_ca (config.ssl_settings, g_strdup (getenv ("SSL_CA_PATH"))) != 1)
-           return FALSE;
-       }
-
-     if (getenv ("SSL_CRL_PATH") && strlen (getenv ("SSL_CRL_PATH")) > 0)
-       {
-         if (mongo_ssl_conf_set_crl (config.ssl_settings, g_strdup (getenv ("SSL_CRL_PATH"))) != 1)
-           return FALSE;
-       }
-
-     if (getenv ("SSL_KEY_PATH") && strlen (getenv ("SSL_KEY_PATH")) >0)
-       {
-        if (mongo_ssl_conf_set_key (config.ssl_settings, g_strdup (getenv ("SSL_KEY_PATH")), 
-                g_strdup (getenv ("SSL_KEY_PW"))) != 1)
+      if (! mongo_ssl_conf_init (config.ssl_settings))
+        {
+          perror ("mongo_ssl_conf_init");
           return FALSE;
-       }
-     else 
-        return FALSE;
+        }
+
+      if (! mongo_ssl_conf_set_cert (config.ssl_settings, g_strdup (getenv ("SSL_CERT_PATH"))))
+        {
+          perror ("mongo_ssl_conf_set_cert");
+          return FALSE;
+        }
+
+
+      if (getenv ("SSL_CA_PATH") && strlen (getenv ("SSL_CA_PATH")) > 0)
+        {
+          if (! mongo_ssl_conf_set_ca (config.ssl_settings, g_strdup (getenv ("SSL_CA_PATH"))))
+            {
+              perror ("mongo_ssl_conf_set_ca");
+              return FALSE;
+            }
+        }
+
+
+      if (getenv ("SSL_CRL_PATH") && strlen (getenv ("SSL_CRL_PATH")) > 0)
+        {
+          if (! mongo_ssl_conf_set_crl (config.ssl_settings, g_strdup (getenv ("SSL_CRL_PATH"))))
+            {
+              perror ("mongo_ssl_conf_set_crl");
+              return FALSE;
+            }
+        }
+
+      if (getenv ("SSL_KEY_PATH") && strlen (getenv ("SSL_KEY_PATH")) >0)
+        {
+         if (! mongo_ssl_conf_set_key (config.ssl_settings, g_strdup (getenv ("SSL_KEY_PATH")), 
+                g_strdup (getenv ("SSL_KEY_PW"))))
+           {
+             perror ("mongo_ssl_conf_set_key");
+             return FALSE;
+           }
+        }
+      else 
+         return FALSE;
     }
+
   return TRUE;
 }
 

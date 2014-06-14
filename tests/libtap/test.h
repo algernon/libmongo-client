@@ -39,6 +39,19 @@ extern func_config_t config;
       test_env_free();				\
     } while (0)
 
+#define begin_ssl_tests(n)                          \
+  do									\
+    {									\
+      gboolean t = test_env_setup (); \
+      if (config.ssl_settings->ctx == NULL) t = FALSE; \
+      skip(!t, n, "Environment not set up for SSL tests")
+
+#define end_ssl_tests()			\
+      endskip;					\
+      test_env_free();				\
+    } while (0)
+
+
 #define RUN_TEST(n, t) \
   int                  \
   main (void)          \

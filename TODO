@@ -5,3 +5,4 @@
  * Sometimes (it does not seem deterministic right now) f_sync_pool fails for some reason (using MongoDB v2.6.0)
  * Check for memory leaks, etc.
  * Write documentation
+ * Hide mongo_ssl_verify_session

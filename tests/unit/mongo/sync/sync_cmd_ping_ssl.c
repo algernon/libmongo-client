@@ -34,7 +34,7 @@ test_mongo_sync_cmd_ping_net_ssl (void)
 {
   mongo_sync_connection *c;
 
-  begin_network_tests (4);
+  begin_ssl_tests (4);
 
   c = mongo_sync_ssl_connect (config.primary_host, config.primary_port, TRUE, config.ssl_settings);
 
@@ -51,7 +51,7 @@ test_mongo_sync_cmd_ping_net_ssl (void)
 
   test_mongo_sync_cmd_ping_net_secondary_ssl ();
 
-  end_network_tests ();
+  end_ssl_tests ();
 }
 
 void

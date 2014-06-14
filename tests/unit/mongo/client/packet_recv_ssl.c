@@ -25,7 +25,7 @@ test_mongo_packet_recv_ssl (void)
   ok (errno == EBADF,
       "mongo_packet_recv() sets errno to EBADF is the FD is bad");
 
-  begin_network_tests (2);
+  begin_ssl_tests (2);
 
   b = bson_new ();
   bson_append_int32 (b, "getnonce", 1);
@@ -50,7 +50,7 @@ test_mongo_packet_recv_ssl (void)
 
   mongo_disconnect (conn);
 
-  end_network_tests ();
+  end_ssl_tests ();
 }
 
 RUN_TEST (6, mongo_packet_recv_ssl);

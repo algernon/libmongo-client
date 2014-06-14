@@ -146,77 +146,79 @@ mongo_unix_connect (const char *path)
 mongo_connection * 
 mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf) 
 {
-    if (conf == NULL)
-        {
-          errno = EINVAL;
-          return NULL; 
-        }
+  if (conf == NULL)
+    {
+      errno = EINVAL;
+      return NULL; 
+    }
 
-    if (conf->ctx == NULL)
-        {
-          errno = EINVAL;
-          return NULL;
-        }
+  if (conf->ctx == NULL)
+    {
+      errno = EINVAL;
+      return NULL;
+    }
 
-    BIO *bio = NULL; 
-    SSL *ssl = NULL;
-    int fd;
-    gboolean conn_ok = FALSE;
+  BIO *bio = NULL; 
+  SSL *ssl = NULL;
+  int fd;
+  gboolean conn_ok = FALSE;
 
-    if ((bio = BIO_new_ssl_connect (conf->ctx)) == NULL) 
-      {
-        goto error;
-      }
+  if ((bio = BIO_new_ssl_connect (conf->ctx)) == NULL) 
+    {
+      goto error;
+    }
 
 
-    BIO_get_ssl (bio, &ssl);
-    if (!ssl)
-      {
-        goto error;
-      }
+  BIO_get_ssl (bio, &ssl);
+  if (!ssl)
+    {
+      goto error;
+    }
  
-    SSL_set_mode (ssl, SSL_MODE_AUTO_RETRY);
+  //SSL_set_mode (ssl, SSL_MODE_AUTO_RETRY); // Controlled on a per-CTX basis (see mongo_ssl_set_auto_retry)
     
-    if (!BIO_set_conn_hostname (bio, g_strdup_printf("%s:%d", host, port))) 
-      {
-        goto error;
-      }
+  if (!BIO_set_conn_hostname (bio, g_strdup_printf("%s:%d", host, port))) 
+    {
+      goto error;
+    }
 
-    if (!SSL_set_tlsext_host_name (ssl, host)) 
-      {
-        goto error;
-      }
+  if (!SSL_set_tlsext_host_name (ssl, host))      
+    {
+      goto error;
+    }
 
-    if (BIO_do_connect (bio) != 1) 
-      {
-        goto error;
-      }
+  if (BIO_do_connect (bio) != 1) 
+    {
+      goto error;
+    }
 
-    conn_ok = TRUE;
+  conn_ok = TRUE;
 
-    if (BIO_do_handshake (bio) != 1) 
-      {
-        goto error;
-      }
+  if (BIO_do_handshake (bio) != 1) 
+    {
+      goto error;
+    }
 
-    if ((mongo_ssl_verify_session (ssl, bio)) != 1) 
-      {
-        goto error;
-      }
-
-    mongo_connection *conn = g_new0 (mongo_connection, 1);
+  if ((mongo_ssl_verify_session (ssl, bio)) != 1) 
+    {
+      goto error;
+    }
+  
+  mongo_connection *conn = g_new0 (mongo_connection, 1);
     
-    fd = SSL_get_fd (ssl); 
+  fd = SSL_get_fd (ssl); 
     
-    BIO_set_close (bio, BIO_CLOSE);
+  BIO_set_close (bio, BIO_CLOSE);
 
-    conn->fd = fd;    
-    conn->ssl = g_new0 (mongo_ssl_conn, 1);
-    conn->ssl->bio = bio;
-    conn->ssl->conn = ssl;
-    conn->ssl->super = conf;
+  conn->fd = fd;    
+  conn->ssl = g_new0 (mongo_ssl_conn, 1); 
+  conn->ssl->bio = bio;
+  conn->ssl->conn = ssl;
+  conn->ssl->super = conf;
 
-    return conn;
+  mongo_connection_set_timeout (conn, 2500); // try to set a lower default timeout
+    
+  return conn;
 
 error:
   conf->last_ssl_error = ERR_peek_last_error ();

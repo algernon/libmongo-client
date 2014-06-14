@@ -81,7 +81,7 @@ test_mongo_sync_cmd_delete_net_ssl (void)
   mongo_sync_connection *conn;
   bson *b;
 
-  begin_network_tests (4);
+  begin_ssl_tests (4);
 
   conn = mongo_sync_ssl_connect (config.primary_host, config.primary_port, TRUE, config.ssl_settings);
   mongo_sync_conn_set_auto_reconnect (conn, TRUE);
@@ -108,7 +108,7 @@ test_mongo_sync_cmd_delete_net_ssl (void)
 
   test_mongo_sync_cmd_delete_net_secondary_ssl ();
  
-  end_network_tests ();
+  end_ssl_tests ();
 }
 
 void

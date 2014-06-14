@@ -27,7 +27,7 @@ test_mongo_sync_cmd_insert_ssl (void)
   bson_free (b1);
   bson_free (b2);
 
-  begin_network_tests (4);
+  begin_ssl_tests (4);
 
   b1 = bson_new ();
   bson_append_string (b1, "sync_cmd_insert", "works", -1);
@@ -72,7 +72,7 @@ test_mongo_sync_cmd_insert_ssl (void)
   bson_free (b1);
   bson_free (b2);
 
-  end_network_tests ();
+  end_ssl_tests ();
 }
 
 RUN_TEST (8, mongo_sync_cmd_insert_ssl);

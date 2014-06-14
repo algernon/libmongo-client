@@ -6,7 +6,6 @@
 #include <string.h>
 
 #include <sys/stat.h>
-#include <stdio.h> 
 
 
 static const gchar *mongo_ssl_default_cipher_list = "HIGH";
@@ -14,10 +13,10 @@ static gboolean mongo_ssl_lib_initialized = FALSE;
 static GStaticMutex *mongo_ssl_locks;
 static gint mongo_ssl_lock_count;
 
-// FIXME: Some portions come from the syslog-ng source code (to merge or not to merge, that is the question...)
+//#define LOCK(ctx) { g_static_mutex_lock (&ctx->__guard)
+//#define UNLOCK(ctx) g_static_mutex_unlock (&ctx->__guard); }
 
-// TODO: check_dn (), check_altnames () = SNI 
-// TODO: rettype int --> gboolean (where only 0 or 1 returned : FALSE = 0, TRUE = (!FALSE)) 
+// FIXME: Some portions come from the syslog-ng source code (to merge or not to merge, that is the question...)
 
 static unsigned long
 ssl_thread_id () 
@@ -62,22 +61,41 @@ crypto_deinit_threading(void)
     {
       g_static_mutex_free (&mongo_ssl_locks[i]);
     }
+    
   g_free (mongo_ssl_locks);
 }
 
-int 
-mongo_ssl_set_auto_retry (mongo_ssl_ctx *c)
+gboolean 
+mongo_ssl_set_auto_retry (mongo_ssl_ctx *c, gboolean auto_retry)
 {
   assert (c != NULL);
+
+  glong mode_new, mode_curr;
     
   if (c->ctx == NULL)
     {
       errno = EINVAL;
-      return -1;
+      return FALSE;
     }
 
-  SSL_CTX_set_mode (c->ctx, SSL_MODE_AUTO_RETRY);
-  return 1;
+  mode_curr = SSL_CTX_get_mode (c->ctx);
+
+  mode_new = 0;
+
+  if (mode_curr & SSL_MODE_ENABLE_PARTIAL_WRITE)
+    mode_new |= SSL_MODE_ENABLE_PARTIAL_WRITE;
+  if (mode_curr & SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER)
+    mode_new |= SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER;
+  if ((mode_curr & SSL_MODE_AUTO_RETRY) && auto_retry)
+    mode_new |= SSL_MODE_AUTO_RETRY;
+  if (mode_curr & SSL_MODE_RELEASE_BUFFERS)
+    mode_new |= SSL_MODE_RELEASE_BUFFERS;
+
+
+  SSL_CTX_set_mode (c->ctx, 0);
+  SSL_CTX_set_mode (c->ctx, mode_new);
+
+  return TRUE;
 }
 
 void 
@@ -101,11 +119,10 @@ _ignore_signal (gint _sig)
 
   memset (&sa, 0, sizeof (sa));
   sa.sa_handler = SIG_IGN;
-  if (sigaction (_sig, &sa, NULL) < 0)
-    fprintf (stderr, "sigaction() error\n");
+  sigaction (_sig, &sa, NULL);
 }
 
-int
+void
 mongo_ssl_util_init_lib ()
 {
   _ignore_signal (SIGPIPE);
@@ -117,40 +134,43 @@ mongo_ssl_util_init_lib ()
   crypto_init_threading ();        
 }
 
-int 
+gboolean
 mongo_ssl_conf_init (mongo_ssl_ctx* c) 
 {
-    c->ca_path = NULL;
-    c->cert_path = NULL;
-    c->crl_path = NULL;
-    c->key_path = NULL;
-    c->key_pw = NULL;
+  g_static_mutex_init (c->__guard);
 
-    if (c->ctx == NULL) 
+  c->ca_path = NULL;
+  c->cert_path = NULL;
+  c->crl_path = NULL;
+  c->key_path = NULL;
+  c->key_pw = NULL;
+
+  if (c->ctx == NULL) 
+    {
+      c->last_ssl_error = 1;
+      c->ctx = SSL_CTX_new (SSLv23_client_method ());
+      if (c->ctx == NULL) 
         {
-           c->last_ssl_error = 1;
-           c->ctx = SSL_CTX_new (SSLv23_client_method ());
-           if (c->ctx == NULL) 
-            {
-                c->last_ssl_error = ERR_peek_last_error ();
-                return 0;
-            }
+          c->last_ssl_error = ERR_peek_last_error ();
+          return FALSE;
+        }
            
-           SSL_CTX_set_options(c->ctx, SSL_OP_NO_SSLv2 | SSL_OP_NO_COMPRESSION | SSL_OP_ALL | SSL_OP_SINGLE_DH_USE | SSL_OP_EPHEMERAL_RSA);
+      SSL_CTX_set_options(c->ctx, 
+        SSL_OP_NO_SSLv2 | SSL_OP_NO_COMPRESSION | SSL_OP_ALL | SSL_OP_SINGLE_DH_USE | SSL_OP_EPHEMERAL_RSA);
 
-           if (!SSL_CTX_set_cipher_list (c->ctx, mongo_ssl_default_cipher_list))
-            {
-                c->last_ssl_error = ERR_peek_last_error ();
-                return 0;
-            }
+      if (!SSL_CTX_set_cipher_list (c->ctx, mongo_ssl_default_cipher_list))
+        {
+          c->last_ssl_error = ERR_peek_last_error ();
+          return FALSE;
+        }
            
-           if (!SSL_CTX_set_default_verify_paths (c->ctx)) 
-            {
-                c->last_ssl_error = ERR_peek_last_error();
-                return 0;
-            }
+      if (!SSL_CTX_set_default_verify_paths (c->ctx)) 
+        {
+          c->last_ssl_error = ERR_peek_last_error();
+          return FALSE;
+        }
 
-          SSL_CTX_set_verify (c->ctx, SSL_VERIFY_PEER, NULL);
+      SSL_CTX_set_verify (c->ctx, SSL_VERIFY_PEER, NULL);
           /*
            * We could use our own verification callback here but it is just more simple to
            * use a dedicated function for server authentication aka. session verification (mongo_ssl_verify_session).
@@ -158,11 +178,12 @@ mongo_ssl_conf_init (mongo_ssl_ctx* c)
            *  --> Handshake may complete before hostname checks
            *  --> X509_V_ERR_CERT_CHAIN_TOO_LONG cannot be detected properly
           **/
-          c->verify_depth = MONGO_SSL_CERT_CHAIN_VERIFY_DEPTH;
-          SSL_CTX_set_verify_depth (c->ctx, c->verify_depth); 
-          mongo_ssl_set_auto_retry (c);
-       }
-       return 1;
+      c->verify_depth = MONGO_SSL_CERT_CHAIN_VERIFY_DEPTH;
+      SSL_CTX_set_verify_depth (c->ctx, c->verify_depth); 
+      mongo_ssl_set_auto_retry (c, TRUE);
+    }
+
+  return TRUE;
 }
 
 void
@@ -172,6 +193,7 @@ mongo_ssl_conf_clear (mongo_ssl_ctx *c)
   if (c->ctx == NULL) return;
 
   SSL_CTX_free (c->ctx); c->ctx = NULL;
+  
   g_free (c->ca_path);  c->ca_path = NULL;
   g_free (c->cert_path); c->cert_path = NULL;
   g_free (c->key_path); c->key_path = NULL;
@@ -190,7 +212,7 @@ _file_exists (gchar *path)
   return TRUE;
 }
 
-int 
+gboolean
 mongo_ssl_conf_set_ca (mongo_ssl_ctx *c, gchar *ca_path) 
 {
   assert(c != NULL);
@@ -204,131 +226,156 @@ mongo_ssl_conf_set_ca (mongo_ssl_ctx *c, gchar *ca_path)
       if (!SSL_CTX_load_verify_locations (c->ctx, NULL, ca_path))
         {
           c->last_ssl_error = ERR_peek_last_error();
-          return 0;
+          return FALSE;
         }
     }
 
   c->ca_path = g_strdup (ca_path);
-  return 1;
+  
+  return TRUE;
 }
 
-int 
+gboolean
 mongo_ssl_conf_set_cert (mongo_ssl_ctx *c, gchar *cert_path) 
 {
   assert(c != NULL);
   assert(c->ctx != NULL);
   assert(cert_path != NULL);
 
-  if (!_file_exists (cert_path)) return 0;
+  if (!_file_exists (cert_path)) return FALSE;
 
   if (!SSL_CTX_use_certificate_file (c->ctx, cert_path, SSL_FILETYPE_PEM)) 
     {
       if (!SSL_CTX_use_certificate_chain_file (c->ctx, cert_path)) 
         {
           c->last_ssl_error = ERR_peek_last_error ();
-          return 0;
+          return FALSE;
         }
     }
 
   c->cert_path = g_strdup (cert_path);
-  return 1;
+
+  return TRUE;
 }
 
-int 
+gboolean
 mongo_ssl_conf_set_crl (mongo_ssl_ctx *c, gchar *crl_path) 
 {
     assert (c != NULL);
     assert (c->ctx != NULL);
     assert (crl_path != NULL);
 
-    if (!_file_exists (crl_path)) return 0;
+    if (!_file_exists (crl_path)) return FALSE;
 
     if (!SSL_CTX_load_verify_locations (c->ctx, crl_path, NULL))
       {
         if (!SSL_CTX_load_verify_locations (c->ctx, NULL, crl_path))
           {
             c->last_ssl_error = ERR_peek_last_error ();
-            return 0;
+            return FALSE;
           }
       }
-
-
     
     X509_VERIFY_PARAM* p = X509_VERIFY_PARAM_new ();
     X509_VERIFY_PARAM_set_flags (p, X509_V_FLAG_CRL_CHECK | X509_V_FLAG_EXTENDED_CRL_SUPPORT); 
-    SSL_CTX_set1_param(c->ctx, p);
+    SSL_CTX_set1_param (c->ctx, p);
     X509_VERIFY_PARAM_free (p);
     
-    return 1;
+    return TRUE;
 }
 
-int 
+gboolean
 mongo_ssl_conf_set_key (mongo_ssl_ctx *c, gchar *key_path, char *key_pw) 
 {
-    assert(c != NULL);
-    assert(c->ctx != NULL);
-    assert(key_path != NULL);
+  assert (c != NULL);
+  assert (c->ctx != NULL);
+  assert (key_path != NULL);
 
-    if (!_file_exists (key_path)) return 0;
+  if (!_file_exists (key_path)) return FALSE;
     
-    if (key_pw == NULL)
+  if (key_pw == NULL)
+    {
+      if (!SSL_CTX_use_PrivateKey_file (c->ctx, key_path, SSL_FILETYPE_PEM))
         {
-            if (!SSL_CTX_use_PrivateKey_file (c->ctx, key_path, SSL_FILETYPE_PEM))
-                {
-                    c->last_ssl_error = ERR_peek_last_error ();
-                    return 0;
-                }
+          c->last_ssl_error = ERR_peek_last_error ();
+          return FALSE;
         }
-    else
+    }
+    
+  else
+    {
+      FILE* pKeyFile = fopen (key_path, "r");
+      if (pKeyFile == NULL)
         {
-            FILE* pKeyFile = fopen (key_path, "r");
-            if (pKeyFile == NULL)
-                {
-                    errno = ENOENT;
-                    return 0;
-                }
-            EVP_PKEY* private_key = PEM_read_PrivateKey (pKeyFile, NULL, NULL, key_pw);
-            if (private_key == NULL) 
-                {
-                        c->last_ssl_error = ERR_peek_last_error ();
-                        return 0;
-                }
-                if (!SSL_CTX_use_PrivateKey (c->ctx, private_key)) {
-                        c->last_ssl_error = ERR_peek_last_error ();
-                        return 0;
-                }
-                fclose(pKeyFile);
+          errno = ENOENT;
+          return FALSE;
         }
+        
+      EVP_PKEY* private_key = PEM_read_PrivateKey (pKeyFile, NULL, NULL, key_pw);
+      if (private_key == NULL) 
+        {
+          c->last_ssl_error = ERR_peek_last_error ();
+          return FALSE;
+        }
+                
+      if (!SSL_CTX_use_PrivateKey (c->ctx, private_key)) 
+        {
+          c->last_ssl_error = ERR_peek_last_error ();
+          return FALSE;
+        }
+                
+      fclose(pKeyFile);
+    }
 
-    if (!SSL_CTX_check_private_key (c->ctx))
-        {
-            c->last_ssl_error = ERR_peek_last_error ();
-            return 0;
-        }
+  if (!SSL_CTX_check_private_key (c->ctx))
+    {
+      c->last_ssl_error = ERR_peek_last_error ();
+      return FALSE;
+    }
     
-    c->key_path = g_strdup (key_path);
-    if (key_pw != NULL) 
-        {
-            c->key_pw = g_strdup (key_pw);
-            mlock (c->key_pw, strlen (key_pw) + 1);
-        }
-    return 1;
+  c->key_path = g_strdup (key_path);
+    
+  if (key_pw != NULL) 
+    {
+      c->key_pw = g_strdup (key_pw);
+      mlock (c->key_pw, strlen (key_pw) + 1);
+    }
+
+  return TRUE;
 }
 
-int 
-mongo_ssl_conf_set_ciphers (mongo_ssl_ctx *c, gchar *cipher_list) 
+gboolean 
+mongo_ssl_conf_set_ciphers (mongo_ssl_ctx *c, mongo_ssl_ciphers ciphers) 
 {
-    assert (c != NULL);
-    assert (c->ctx != NULL);
-    assert (cipher_list != NULL);
-    
-    if (!SSL_CTX_set_cipher_list (c->ctx, cipher_list)) 
-        {
-            c->last_ssl_error = ERR_peek_last_error ();
-            return 0;
-        }
+  assert (c != NULL);
+  assert (c->ctx != NULL);
+  
+  gchar* cipher_list = g_strdup (mongo_ssl_default_cipher_list);
+  gboolean ok = TRUE;
 
-    return 1;
+  switch (ciphers) 
+    {
+      case MONGO_SSL_CIPHERS_AES: 
+        strcpy (cipher_list, "AES256-GCM-SHA384:AES256-SHA256:AES128-GCM-SHA384:AES128-SHA-256:AES256-SHA:AES128-SHA");
+        break;
+      case MONGO_SSL_CIPHERS_3DES:
+        strcpy (cipher_list, "DES-CBC3-SHA");
+        break;
+      case MONGO_SSL_CIPHERS_CAMELLIA:
+        strcpy (cipher_list, "CAMELLIA128-SHA");
+        break;
+      default: break;
+    }
+
+  if (!SSL_CTX_set_cipher_list (c->ctx, cipher_list)) 
+    {
+      c->last_ssl_error = ERR_peek_last_error ();
+      ok = FALSE;
+    }
+
+  g_free (cipher_list);
+  
+  return ok;
 }
 
 
@@ -365,35 +412,42 @@ check_dn (const X509 *cert, const gchar *target_hostname)
   dn_parts = g_strsplit (dn->str, ",", 0);
   curr_field = dn_parts[0];
 
-  gchar *_cn = g_locale_to_utf8 ("CN", -1, NULL, NULL, NULL);
+  gchar *_cn = g_locale_to_utf8 ("cn", -1, NULL, NULL, NULL);
+  gchar *_cni = g_utf8_casefold (_cn, -1);
 
   while (curr_field != NULL)
     {
       field_parts = g_strsplit (curr_field, "=", 2);
-      curr_key = g_strchomp (field_parts[0]);
-      curr_value = g_strchomp (field_parts[1]);
+      curr_key = g_strstrip (field_parts[0]);
+      curr_value = g_strstrip (field_parts[1]);
       
-      while ((*curr_key) == 0x20) curr_key++;
-      while ((*curr_value) == 0x20) curr_value++;
+      //while ((*curr_key) == 0x20) curr_key++;
+      //while ((*curr_value) == 0x20) curr_value++;
 
       if (curr_key == NULL || curr_value == NULL) continue;
-      if (strcmp ((const char*) g_utf8_casefold (curr_key, -1), (const char*) g_utf8_casefold (_cn, -1))== 0)
+
+      gchar *curr_key_utf8 = g_utf8_casefold (curr_key, -1);
+      if (strcmp ((const char*) curr_key_utf8, (const char*) _cni) == 0)
         {
           if (g_pattern_match_simple ((const gchar*) curr_value, (const gchar*) target_hostname))
             {
               sni_match = TRUE;
-              g_strfreev (field_parts);
-              break;
             }
         }
   
       g_strfreev (field_parts);
+      g_free (curr_key_utf8);
+
+      if (sni_match) break;
+      
       i += 1;
       curr_field = dn_parts[i];
     }
 
   g_strfreev (dn_parts);
   g_string_free (dn, TRUE);
+  g_free (_cn);
+  g_free (_cni);
 
   return sni_match;
 }
@@ -438,7 +492,7 @@ check_altnames (const X509 *cert, const gchar *target_hostname)
   return sni_match;
 }
 
-int 
+int
 mongo_ssl_verify_session (SSL *c, BIO *b) {
   assert (c != NULL);
   assert (b != NULL);
@@ -454,27 +508,26 @@ mongo_ssl_verify_session (SSL *c, BIO *b) {
     
   if (cert == NULL)
     {
-      return X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT; // TODO: Find more suitable error code to return 
+      return -1;
     }
 
   if (target_hostname == NULL)
     {
       errno = EINVAL;
-      return -1;
+      return -4;
     }
 
 
   if ((err = SSL_get_verify_result (c)) != X509_V_OK)
     {
-      return err;
+      return -2;
     }
 
   sni_match = (check_dn (cert, target_hostname)) || (check_altnames (cert, target_hostname));
 
   if (! sni_match) 
     {
-      err = X509_V_ERR_SUBJECT_ISSUER_MISMATCH;
-      return err;
+      return -3;
     }
 
   return 1;
