@@ -21,7 +21,7 @@ test_mongo_sync_connect_from_cache_enforce_primary (void)
                                                config.secondary_port) == TRUE,
       "mongo_sync_conn_recovery_seed_add() works");
 
-  ok ((c = mongo_sync_connect_recovery_cache (cache, TRUE)) != NULL,
+  ok ((c = mongo_sync_connect_recovery_cache (cache, TRUE, NULL)) != NULL,
       "mongo_sync_connect_recovery_cache() works");
 
   ok (mongo_sync_cmd_is_master(c) == FALSE,
@@ -29,7 +29,7 @@ test_mongo_sync_connect_from_cache_enforce_primary (void)
 
   mongo_sync_disconnect (c);
 
-  ok ((c = mongo_sync_connect_recovery_cache (cache, FALSE)) != NULL,
+  ok ((c = mongo_sync_connect_recovery_cache (cache, FALSE, NULL)) != NULL,
       "mongo_sync_connect_recovery_cache() works");
 
   ok (mongo_sync_cmd_is_master (c) == TRUE,\

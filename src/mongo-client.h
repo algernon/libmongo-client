@@ -64,7 +64,7 @@ mongo_connection *mongo_connect (const char *address, int port);
  *
  * Connects to a single MongoDB server via an SSL-enabled secure connection.
  *
- * @param address is the address of the server (IP)
+ * @param address is the address of the server (IP or hostname)
  * @param port is the port to connect to
  * @param conf stores SSL configuration and context
  *

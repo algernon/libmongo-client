@@ -22,7 +22,6 @@
 
 #define MONGO_SSL_CERT_CHAIN_VERIFY_DEPTH 5
 
-
 G_BEGIN_DECLS
 
 /** @defgroup mongo_ssl Mongo SSL support API
@@ -36,6 +35,14 @@ G_BEGIN_DECLS
 **/
 
 // TODO: Make mongo_ssl_ctx and mongo_ssl_conn thread safe !!!!
+
+/** Available cipher sets supported by MongoDB (as of 2.6). Use MONGO_SSL_CIPHERS_DEFAULT unless you have a strong reason to use a different option **/
+typedef enum {
+    MONGO_SSL_CIPHERS_DEFAULT,
+    MONGO_SSL_CIPHERS_AES,
+    MONGO_SSL_CIPHERS_3DES,
+    MONGO_SSL_CIPHERS_CAMELLIA
+} mongo_ssl_ciphers;
 
 /** An internal context structure that is a wrapper for the SSL_CTX object. It also stores configuration parameters and last SSL related error code from the OpenSSL library. Multiple threads may use the same mongo_ssl_ctx, but only one should manipulate it
 via setter functions at a time! (The internal SSL_CTX object is made thread-safe by the library, but the data fields in mongo_ssl_ctx are not so multiple writes from different threads may introduce inconsistency between these values in mongo_ssl_ctx and the actual state of the internal SSL_CTX object) **/
@@ -51,7 +58,7 @@ typedef struct {
     SSL_CTX *ctx;
     X509_VERIFY_PARAM *params;
     long last_ssl_error;
-    GStaticMutex __guard;
+    //GStaticMutex __guard; // not used yet, see docs (do we need it??)
 } mongo_ssl_ctx;
 
 /** An SSL connection wrapper that consist of a connection (SSL) object and a bidirectional I/O object (BIO) that represents the channel itself. Never manipulate a mongo_ssl_conn object manually! **/
@@ -61,13 +68,8 @@ typedef struct {
     mongo_ssl_ctx *super;
 } mongo_ssl_conn;
 
-/** Available cipher sets supported by MongoDB (as of 2.6). Use MONGO_SSL_CIPHERS_DEFAULT unless you have a strong reason to use a different option **/
-typedef enum {
-    MONGO_SSL_CIPHERS_DEFAULT,
-    MONGO_SSL_CIPHERS_AES,
-    MONGO_SSL_CIPHERS_3DES,
-    MONGO_SSL_CIPHERS_CAMELLIA
-} mongo_ssl_ciphers;
+
+
 
 /** Initializes OpenSSL for you
  * 
@@ -114,6 +116,14 @@ void mongo_ssl_conf_clear (mongo_ssl_ctx *ctx);
 **/
 gboolean mongo_ssl_conf_set_ca (mongo_ssl_ctx *ctx, gchar *ca_path);
 
+/** Gets CA (Certificate Authority) certificate file path
+ *
+ * Retrieves a previously set CA cert. file path defined within the given context.
+ * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
+ * @returns CA path (string); NULL if not set
+**/
+gchar *mongo_ssl_conf_get_ca (const mongo_ssl_ctx *ctx);
+
 /** Sets client certificate file path
  * 
  * The client will present this certificate upon request. The file should contain either a single certificate or an
@@ -123,6 +133,14 @@ gboolean mongo_ssl_conf_set_ca (mongo_ssl_ctx *ctx, gchar *ca_path);
  * @returns TRUE on success, FALSE on failure
 **/
 gboolean mongo_ssl_conf_set_cert (mongo_ssl_ctx *ctx, gchar *cert_path);
+
+/** Sets client certificate file path
+ * 
+ * Retrieves a previously set client cert. file path defined within the given context.
+ * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
+ * @returns Client cert. path (string); NULL if not set
+**/
+gchar *mongo_ssl_conf_get_cert (const mongo_ssl_ctx *ctx);
 
 /** Sets CRL (Certificate Revocation List) file path
  *
@@ -135,6 +153,14 @@ gboolean mongo_ssl_conf_set_cert (mongo_ssl_ctx *ctx, gchar *cert_path);
 **/
 gboolean mongo_ssl_conf_set_crl (mongo_ssl_ctx *ctx, gchar *crl_path);
 
+/** Gets CRL (Certificate Revocation List) file path
+ * 
+ * Retrieves a previously set CRL file path defined within the given context.
+ * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
+ * @returns CRL file path (string); NULL if not set
+**/
+gchar *mongo_ssl_conf_get_crl (const mongo_ssl_ctx *ctx);
+
 /** Sets client private key file
  *
  * The user must specify the client's private key. The key file must be PEM-formatted, although, may be encrypted.
@@ -146,6 +172,14 @@ gboolean mongo_ssl_conf_set_crl (mongo_ssl_ctx *ctx, gchar *crl_path);
 **/
 gboolean mongo_ssl_conf_set_key (mongo_ssl_ctx *ctx, gchar *key_path, gchar *key_pw); 
 
+/** Gets client private key file path
+ *
+ * Retrieves a previously set client private key file path defined within the given context.
+ * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
+ * @returns Private key file path (string); NULL if not set
+**/
+gchar *mongo_ssl_conf_get_key (const mongo_ssl_ctx *ctx);
+
 /** Sets list of accepted ciphers
  *
  * Set ciphers that the client should accept during the handshake process.
@@ -154,6 +188,15 @@ gboolean mongo_ssl_conf_set_key (mongo_ssl_ctx *ctx, gchar *key_path, gchar *key
  * @returns TRUE on success, FALSE on failure
 **/
 gboolean mongo_ssl_conf_set_ciphers (mongo_ssl_ctx *ctx, mongo_ssl_ciphers chipers);
+
+
+/** Gets list of accepted ciphers
+ *
+ * Retrieves a previously set list of accepted ciphers defined within the given context.
+ * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
+ * @returns An enumeration representing the cipher set
+**/
+mongo_ssl_ciphers mongo_ssl_conf_get_ciphers (const mongo_ssl_ctx* ctx);
 
 /** Puts further connections corresponding to the given context in auto-retry mode
  *
@@ -166,6 +209,22 @@ gboolean mongo_ssl_conf_set_ciphers (mongo_ssl_ctx *ctx, mongo_ssl_ciphers chipe
 **/
 gboolean mongo_ssl_set_auto_retry (mongo_ssl_ctx *ctx, gboolean auto_retry);
 
+/** Retrieves the last SSL-related error message 
+ *
+ * Gets the latest OpenSSL library error message
+ * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
+ * @return An OpenSSL error string (should never be NULL)
+**/
+const gchar* mongo_ssl_last_error (mongo_ssl_ctx *ctx);
+
+/** Sets maximal depth of certificate chain verification
+ *
+ * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
+ * @param depth Maximal verification depth
+ * @returns TRUE on success, FALSE on failure
+**/
+gboolean mongo_ssl_conf_set_verify_depth (mongo_ssl_ctx *ctx, gint depth);
+
 /** Performs session verification
  *
  * Checks the certificate provided by the server. The check includes the OpenSSL built-in process
@@ -176,14 +235,6 @@ gboolean mongo_ssl_set_auto_retry (mongo_ssl_ctx *ctx, gboolean auto_retry);
  * @param b A pointer to a BIO object representing the channel
 **/
 int mongo_ssl_verify_session (SSL *c, BIO *b); 
-
-/** Retrieves the last SSL-related error message 
- *
- * Gets the latest OpenSSL library error message
- * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
- * @return An OpenSSL error string (should never be NULL)
-**/
-const gchar* mongo_ssl_last_error (mongo_ssl_ctx *ctx);
 
 G_END_DECLS
 

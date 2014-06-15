@@ -41,7 +41,7 @@ test_func_mongo_sync_safe_mode_basics_cache (void)
                                            config.primary_host,
                                            config.primary_port);
 
-  conn = mongo_sync_connect_recovery_cache (cache, FALSE);
+  conn = mongo_sync_connect_recovery_cache (cache, FALSE, NULL);
 
   /* Test inserts */
   mongo_sync_conn_set_safe_mode (conn, FALSE);
@@ -109,7 +109,7 @@ test_func_mongo_sync_safe_mode_invalid_db_cache (void)
                                            config.primary_host,
                                            config.primary_port);
 
-  conn = mongo_sync_connect_recovery_cache (cache, TRUE);
+  conn = mongo_sync_connect_recovery_cache (cache, TRUE, NULL);
 
   mongo_sync_conn_set_safe_mode (conn, TRUE);
 

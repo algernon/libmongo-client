@@ -105,10 +105,11 @@ mongo_client_func_tests = \
 mongo_sync_unit_tests	= \
 		unit/mongo/sync/sync_connect \
 		unit/mongo/sync/sync_connect_cache \
-		unit/mongo/sync/sync_conn_seed_add \
+		unit/mongo/sync/sync_connect_cache_ssl \
+        unit/mongo/sync/sync_conn_seed_add \
 		unit/mongo/sync/sync_conn_seed_add_cache \
 		unit/mongo/sync/sync_reconnect \
-        unit/mongo/sync/sync_reconnect_ssl \ 
+        unit/mongo/sync/sync_reconnect_ssl \
 		unit/mongo/sync/sync_disconnect \
 		unit/mongo/sync/sync_get_set_auto_reconnect \
 		unit/mongo/sync/sync_get_set_safe_mode \
@@ -116,7 +117,7 @@ mongo_sync_unit_tests	= \
 		unit/mongo/sync/sync_get_set_max_insert_size \
 		unit/mongo/sync/sync_cmd_update \
 		unit/mongo/sync/sync_cmd_insert \
-      	unit/mongo/sync/sync_cmd_insert_ssl \ 
+      	unit/mongo/sync/sync_cmd_insert_ssl \
 		unit/mongo/sync/sync_cmd_insert_n \
 		unit/mongo/sync/sync_cmd_query \
 		unit/mongo/sync/sync_cmd_get_more \
@@ -131,7 +132,7 @@ mongo_sync_unit_tests	= \
 		unit/mongo/sync/sync_cmd_reset_error \
 		unit/mongo/sync/sync_cmd_is_master \
 		unit/mongo/sync/sync_cmd_ping \
-      	unit/mongo/sync/sync_cmd_ping_ssl \ 
+      	unit/mongo/sync/sync_cmd_ping_ssl \
 		unit/mongo/sync/sync_cmd_user_add \
 		unit/mongo/sync/sync_cmd_user_add_with_roles \
 		unit/mongo/sync/sync_cmd_user_remove \

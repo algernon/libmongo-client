@@ -30,7 +30,7 @@ test_func_mongo_sync_auto_reconnect_cache (void)
                                            config.primary_port);
 
   conn = mongo_sync_connect_recovery_cache (cache,
-                                            TRUE);
+                                            TRUE, NULL);
 
   ok (mongo_sync_cmd_insert (conn, config.ns, b, NULL) == TRUE);
 

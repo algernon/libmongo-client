@@ -2154,7 +2154,8 @@ mongo_sync_conn_recovery_cache_seed_add (mongo_sync_conn_recovery_cache *cache,
 static mongo_sync_connection *
 _recovery_cache_pick_connect_from_list (mongo_sync_conn_recovery_cache *cache,
                                         GList *address_list,
-                                        gboolean slaveok)
+                                        gboolean slaveok,
+                                        mongo_ssl_ctx *ssl_config)
 {
   gint port;
   guint i;
@@ -2170,7 +2171,12 @@ _recovery_cache_pick_connect_from_list (mongo_sync_conn_recovery_cache *cache,
           if (!mongo_util_parse_addr (addr, &host, &port))
             continue;
 
-          c = _recovery_cache_connect (cache, host, port, slaveok);
+          if (ssl_config != NULL)
+            if (ssl_config->ctx != NULL)
+              c = _recovery_cache_ssl_connect (cache, host, port, slaveok, ssl_config);
+
+          if (c == NULL) c = _recovery_cache_connect (cache, host, port, slaveok);
+
           g_free (host);
           if (c)
             {
@@ -2187,7 +2193,8 @@ _recovery_cache_pick_connect_from_list (mongo_sync_conn_recovery_cache *cache,
 
 mongo_sync_connection *
 mongo_sync_connect_recovery_cache (mongo_sync_conn_recovery_cache *cache,
-                                   gboolean slaveok)
+                                   gboolean slaveok,
+                                   mongo_ssl_ctx *ssl_config)
 {
   mongo_sync_connection *c = NULL;
   gchar *host;
@@ -2195,7 +2202,13 @@ mongo_sync_connect_recovery_cache (mongo_sync_conn_recovery_cache *cache,
 
   if (cache->rs.primary && mongo_util_parse_addr (cache->rs.primary, &host, &port))
     {
-      if ( (c = _recovery_cache_connect (cache, host, port, slaveok)) )
+      if (ssl_config != NULL)
+        if (ssl_config->ctx != NULL)
+          c = _recovery_cache_ssl_connect (cache, host, port, slaveok, ssl_config);
+
+      if (c == NULL) c = _recovery_cache_connect (cache, host, port, slaveok);
+
+      if ( c )
         {
           g_free (host);
           if (slaveok)
@@ -2205,13 +2218,14 @@ mongo_sync_connect_recovery_cache (mongo_sync_conn_recovery_cache *cache,
         }
     }
 
-  c = _recovery_cache_pick_connect_from_list (cache, cache->rs.seeds, slaveok);
+  c = _recovery_cache_pick_connect_from_list (cache, cache->rs.seeds, slaveok, ssl_config);
 
   if (!c)
-    c = _recovery_cache_pick_connect_from_list (cache, cache->rs.hosts, slaveok);
+    c = _recovery_cache_pick_connect_from_list (cache, cache->rs.hosts, slaveok, ssl_config);
 
   return c;
 }
+
 
 const gchar *
 mongo_sync_conn_get_last_error (mongo_sync_connection *conn)

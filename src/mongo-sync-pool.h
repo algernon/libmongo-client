@@ -65,6 +65,7 @@ typedef struct _mongo_sync_pool mongo_sync_pool;
  * master.
  * @param nslaves is the number of connections to make towards the
  * secondaries.
+ * @param ssl_config Mongo SSL configuration & context (leave it NULL if not using SSL)
  *
  * @note Either @a nmasters or @a nslaves can be zero, but not both at
  * the same time.
@@ -78,7 +79,8 @@ typedef struct _mongo_sync_pool mongo_sync_pool;
  */
 mongo_sync_pool *mongo_sync_pool_new (const gchar *host,
                                       gint port,
-                                      gint nmasters, gint nslaves);
+                                      gint nmasters, gint nslaves, 
+                                      mongo_ssl_ctx *ssl_config);
 
 /** Close and free a synchronous connection pool.
  *

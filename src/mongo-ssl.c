@@ -8,13 +8,18 @@
 #include <sys/stat.h>
 
 
-static const gchar *mongo_ssl_default_cipher_list = "HIGH";
+#define HIGH_CIPHERS "HIGH"
+#define AES_CIPHERS "AES256-GCM-SHA384:AES256-SHA256:AES128-GCM-SHA384:AES128-SHA-256:AES256-SHA:AES128-SHA"
+#define TRIPLEDES_CIPHERS "DES-CBC3-SHA"
+#define CAMELLIA_CIPHERS "CAMELLIA128-SHA"
+
 static gboolean mongo_ssl_lib_initialized = FALSE;
 static GStaticMutex *mongo_ssl_locks;
 static gint mongo_ssl_lock_count;
 
 //#define LOCK(ctx) { g_static_mutex_lock (&ctx->__guard)
 //#define UNLOCK(ctx) g_static_mutex_unlock (&ctx->__guard); }
+
 
 // FIXME: Some portions come from the syslog-ng source code (to merge or not to merge, that is the question...)
 
@@ -137,8 +142,6 @@ mongo_ssl_util_init_lib ()
 gboolean
 mongo_ssl_conf_init (mongo_ssl_ctx* c) 
 {
-  g_static_mutex_init (c->__guard);
-
   c->ca_path = NULL;
   c->cert_path = NULL;
   c->crl_path = NULL;
@@ -158,7 +161,7 @@ mongo_ssl_conf_init (mongo_ssl_ctx* c)
       SSL_CTX_set_options(c->ctx, 
         SSL_OP_NO_SSLv2 | SSL_OP_NO_COMPRESSION | SSL_OP_ALL | SSL_OP_SINGLE_DH_USE | SSL_OP_EPHEMERAL_RSA);
 
-      if (!SSL_CTX_set_cipher_list (c->ctx, mongo_ssl_default_cipher_list))
+      if (!SSL_CTX_set_cipher_list (c->ctx, HIGH_CIPHERS))
         {
           c->last_ssl_error = ERR_peek_last_error ();
           return FALSE;
@@ -235,6 +238,15 @@ mongo_ssl_conf_set_ca (mongo_ssl_ctx *c, gchar *ca_path)
   return TRUE;
 }
 
+gchar*
+mongo_ssl_conf_get_ca (const mongo_ssl_ctx *c)
+{
+  assert (c != NULL);
+  assert (c->ctx != NULL);
+
+  return c->ca_path;
+}
+
 gboolean
 mongo_ssl_conf_set_cert (mongo_ssl_ctx *c, gchar *cert_path) 
 {
@@ -256,6 +268,15 @@ mongo_ssl_conf_set_cert (mongo_ssl_ctx *c, gchar *cert_path)
   c->cert_path = g_strdup (cert_path);
 
   return TRUE;
+}
+
+gchar*
+mongo_ssl_conf_get_cert (const mongo_ssl_ctx *c)
+{
+  assert (c != NULL);
+  assert (c->ctx != NULL);
+
+  return c->cert_path;
 }
 
 gboolean
@@ -282,6 +303,15 @@ mongo_ssl_conf_set_crl (mongo_ssl_ctx *c, gchar *crl_path)
     X509_VERIFY_PARAM_free (p);
     
     return TRUE;
+}
+
+gchar*
+mongo_ssl_conf_get_crl (const mongo_ssl_ctx *c)
+{
+  assert (c != NULL);
+  assert (c->ctx != NULL);
+
+  return c->crl_path;
 }
 
 gboolean
@@ -344,27 +374,38 @@ mongo_ssl_conf_set_key (mongo_ssl_ctx *c, gchar *key_path, char *key_pw)
   return TRUE;
 }
 
+gchar*
+mongo_ssl_conf_get_key (const mongo_ssl_ctx *c)
+{
+  assert (c != NULL);
+  assert (c->ctx != NULL);
+
+  return c->key_path;
+}
+
 gboolean 
 mongo_ssl_conf_set_ciphers (mongo_ssl_ctx *c, mongo_ssl_ciphers ciphers) 
 {
   assert (c != NULL);
   assert (c->ctx != NULL);
   
-  gchar* cipher_list = g_strdup (mongo_ssl_default_cipher_list);
   gboolean ok = TRUE;
-
+  gchar *cipher_list = NULL;
+  
   switch (ciphers) 
     {
       case MONGO_SSL_CIPHERS_AES: 
-        strcpy (cipher_list, "AES256-GCM-SHA384:AES256-SHA256:AES128-GCM-SHA384:AES128-SHA-256:AES256-SHA:AES128-SHA");
+        cipher_list = g_strdup (AES_CIPHERS);
         break;
       case MONGO_SSL_CIPHERS_3DES:
-        strcpy (cipher_list, "DES-CBC3-SHA");
+        cipher_list = g_strdup (TRIPLEDES_CIPHERS);
         break;
       case MONGO_SSL_CIPHERS_CAMELLIA:
-        strcpy (cipher_list, "CAMELLIA128-SHA");
+        cipher_list = g_strdup (CAMELLIA_CIPHERS);
         break;
-      default: break;
+      default: 
+        cipher_list = g_strdup (HIGH_CIPHERS);
+        break;
     }
 
   if (!SSL_CTX_set_cipher_list (c->ctx, cipher_list)) 
@@ -373,11 +414,31 @@ mongo_ssl_conf_set_ciphers (mongo_ssl_ctx *c, mongo_ssl_ciphers ciphers)
       ok = FALSE;
     }
 
+  g_free (c->cipher_list);
+  c->cipher_list = g_strdup (cipher_list);
+
   g_free (cipher_list);
   
   return ok;
 }
 
+mongo_ssl_ciphers
+mongo_ssl_conf_get_ciphers (const mongo_ssl_ctx *c)
+{
+  assert (c != NULL);
+  assert (c->ctx != NULL);
+
+  if (strcmp (c->cipher_list, AES_CIPHERS) == 0)
+    return MONGO_SSL_CIPHERS_AES;
+  else if (strcmp (c->cipher_list, TRIPLEDES_CIPHERS) == 0)
+    return MONGO_SSL_CIPHERS_3DES;
+  else if (strcmp (c->cipher_list, CAMELLIA_CIPHERS) == 0)
+    return MONGO_SSL_CIPHERS_CAMELLIA;
+  else if (strcmp (c->cipher_list, HIGH_CIPHERS) == 0)
+    return MONGO_SSL_CIPHERS_DEFAULT;
+  else
+   assert (FALSE); // the structure has been manipulated by hand
+}
 
 static void
 _get_dn (X509_NAME *name, GString *dn)
