@@ -2172,13 +2172,19 @@ _recovery_cache_pick_connect_from_list (mongo_sync_conn_recovery_cache *cache,
             continue;
 
           if (ssl_config != NULL)
-            if (ssl_config->ctx != NULL)
-              c = _recovery_cache_ssl_connect (cache, host, port, slaveok, ssl_config);
-
-          if (c == NULL) c = _recovery_cache_connect (cache, host, port, slaveok);
+            {
+              if (ssl_config->ctx != NULL)
+                {
+                  c = _recovery_cache_ssl_connect (cache, host, port, slaveok, ssl_config);
+                }
+             }
+          else 
+            {
+              c = _recovery_cache_connect (cache, host, port, slaveok);
+            }
 
           g_free (host);
-          if (c)
+          if ( c )
             {
               if (slaveok)
                 return c;
@@ -2203,10 +2209,16 @@ mongo_sync_connect_recovery_cache (mongo_sync_conn_recovery_cache *cache,
   if (cache->rs.primary && mongo_util_parse_addr (cache->rs.primary, &host, &port))
     {
       if (ssl_config != NULL)
-        if (ssl_config->ctx != NULL)
-          c = _recovery_cache_ssl_connect (cache, host, port, slaveok, ssl_config);
-
-      if (c == NULL) c = _recovery_cache_connect (cache, host, port, slaveok);
+        {
+          if (ssl_config->ctx != NULL)
+            {
+              c = _recovery_cache_ssl_connect (cache, host, port, slaveok, ssl_config);
+            }
+        }
+      else 
+        {
+          c = _recovery_cache_connect (cache, host, port, slaveok);
+        }
 
       if ( c )
         {

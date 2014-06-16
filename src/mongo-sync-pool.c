@@ -41,10 +41,16 @@ _mongo_sync_pool_connect (const gchar *host, gint port, gboolean slaveok, mongo_
   mongo_sync_pool_connection *conn;
 
   if (ssl_config != NULL)
-    if (ssl_config->ctx != NULL)
-     c = mongo_sync_ssl_connect (host, port, slaveok, ssl_config);
-
-  if (c == NULL) c = mongo_sync_connect (host, port, slaveok);
+    {
+      if (ssl_config->ctx != NULL)
+        {
+          c = mongo_sync_ssl_connect (host, port, slaveok, ssl_config);
+        }
+    } 
+  else  
+    {
+      c = mongo_sync_connect (host, port, slaveok);
+    }
 
   if (!c)
     return NULL;
