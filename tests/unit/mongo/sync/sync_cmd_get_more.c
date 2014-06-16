@@ -32,14 +32,14 @@ test_mongo_sync_cmd_get_more_net_secondary (void)
   cid = rh.cursor_id;
   mongo_wire_packet_free (p);
 
-  p = mongo_sync_cmd_get_more (conn, config.db, 3, cid);
+  p = mongo_sync_cmd_get_more (conn, config.ns, 3, cid);
   ok (p != NULL,
       "mongo_sync_cmd_get_more() works on secondary too");
   mongo_wire_packet_free (p);
 
   mongo_sync_reconnect (conn, TRUE);
 
-  p = mongo_sync_cmd_get_more (conn, config.db, 10, cid);
+  p = mongo_sync_cmd_get_more (conn, config.ns, 10, cid);
   ok (p == NULL && errno == EPROTO,
       "mongo_sync_cmd_get_more() can't jump servers");
   mongo_wire_packet_free (p);
