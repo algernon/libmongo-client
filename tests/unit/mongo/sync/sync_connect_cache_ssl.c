@@ -12,7 +12,7 @@ test_mongo_sync_conn_recovery_cache_connection (void)
   ok (mongo_sync_connect_recovery_cache (cache, FALSE, NULL) == NULL,
       "mongo_sync_connect_recovery_cache() should fail when cache is empty");
 
-  begin_network_tests (4);
+  begin_ssl_tests (4);
 
   ok (mongo_sync_conn_recovery_cache_seed_add (cache,
                                                config.primary_host,
@@ -36,7 +36,7 @@ test_mongo_sync_conn_recovery_cache_connection (void)
 
   mongo_sync_conn_recovery_cache_free (cache);
 
-  end_network_tests ();
+  end_ssl_tests ();
 }
 
 RUN_TEST (5, mongo_sync_conn_recovery_cache_connection);

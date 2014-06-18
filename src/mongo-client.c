@@ -143,6 +143,52 @@ mongo_unix_connect (const char *path)
   return conn;
 }
 
+static
+mongo_ssl_session_cache_entry *
+_find_session (mongo_ssl_ctx *conf, const gchar *host, gint port)
+{
+  GList* l;
+  gchar* t;
+  mongo_ssl_session_cache_entry *ret = NULL;
+
+  if (conf == NULL)
+    {
+      errno = EINVAL;
+      return NULL;
+    }
+
+  if (conf->session_cache == NULL)
+    {
+      return NULL;
+    }
+
+  if (host == NULL)
+    {
+      return NULL;
+    }
+
+  if (strlen (host) == 0)
+    {
+      return NULL;
+    }
+
+  t = g_strdup_printf ("%s:%d", host, port);
+
+  for (l = conf->session_cache; l != NULL; l = l->next)
+    {
+      mongo_ssl_session_cache_entry *ent = (mongo_ssl_session_cache_entry *) l->data;
+      if (ent == NULL) continue;
+      if (strcmp (ent->target, t) == 0) 
+        {
+          ret = ent;
+          break;
+        }
+    }
+
+    g_free (t);
+    return ret;
+}
+
 mongo_connection * 
 mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf) 
 {
@@ -160,8 +206,11 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
 
   BIO *bio = NULL; 
   SSL *ssl = NULL;
-  int fd;
+  int fd, err;
   gboolean conn_ok = FALSE;
+  mongo_ssl_session_cache_entry *se = NULL;
+  gboolean reused_session = FALSE;
+  gchar *t = NULL;
 
   if ((bio = BIO_new_ssl_connect (conf->ctx)) == NULL) 
     {
@@ -177,28 +226,50 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
  
   //SSL_set_mode (ssl, SSL_MODE_AUTO_RETRY); // Controlled on a per-CTX basis (see mongo_ssl_set_auto_retry)
     
-  if (!BIO_set_conn_hostname (bio, g_strdup_printf("%s:%d", host, port))) 
+  t = g_strdup_printf ("%s:%d", host, port);
+  if (!BIO_set_conn_hostname (bio, t)) 
     {
       goto error;
     }
 
-  if (!SSL_set_tlsext_host_name (ssl, host))      
+  if (!SSL_set_tlsext_host_name (ssl, host))
     {
       goto error;
     }
+
+  // FIXME
+  //se = _find_session (conf, host, port); // Session resumption does not seem to be working with MongoDB v2.6 (wtf?)
+  
+  if (se != NULL)
+    {
+      if (se->sess != NULL) 
+        {
+          if (SSL_set_session (ssl, se->sess) != 1)
+            {
+              conf->last_ssl_error = ERR_peek_last_error ();
+              SSL_set_session (ssl, NULL);
+            }
+         }
+    }
+ 
 
   if (BIO_do_connect (bio) != 1) 
     {
+      printf ("connect failed\n");
       goto error;
     }
 
   conn_ok = TRUE;
-
-  if (BIO_do_handshake (bio) != 1) 
+  reused_session = SSL_session_reused (ssl);
+  
+  if (!reused_session)
     {
-      goto error;
+      if (BIO_do_handshake (bio) != 1) 
+        {
+          goto error;
+        }
     }
-
+  
   if ((mongo_ssl_verify_session (ssl, bio)) != 1) 
     {
       goto error;
@@ -217,10 +288,29 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
   conn->ssl->super = conf;
 
   mongo_connection_set_timeout (conn, 2500); // try to set a lower default timeout
-    
+  
+  if (se != NULL)
+    {
+      se->sess = SSL_get1_session (ssl);
+    }
+  else
+    {
+      SSL_SESSION *s = SSL_get1_session (ssl);
+      if (s != NULL)
+        {
+          mongo_ssl_session_cache_entry *ent = g_new0 (mongo_ssl_session_cache_entry, 1);
+          ent->target = g_strdup_printf("%s:%d", host, port);
+          ent->sess = s;
+          conf->session_cache = g_list_append (conf->session_cache, ent);
+        }
+    }
+
+  g_free (t);
+
   return conn;
 
 error:
+  g_free (t);
   conf->last_ssl_error = ERR_peek_last_error ();
   if (ssl != NULL)
     {

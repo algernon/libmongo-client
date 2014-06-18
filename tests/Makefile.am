@@ -122,6 +122,7 @@ mongo_sync_unit_tests	= \
 		unit/mongo/sync/sync_cmd_query \
 		unit/mongo/sync/sync_cmd_get_more \
 		unit/mongo/sync/sync_cmd_delete \
+        unit/mongo/sync/sync_cmd_delete_ssl \
 		unit/mongo/sync/sync_cmd_kill_cursors \
 		unit/mongo/sync/sync_cmd_custom \
 		unit/mongo/sync/sync_cmd_count \
@@ -141,8 +142,7 @@ mongo_sync_unit_tests	= \
 		unit/mongo/sync/sync_cmd_index_create \
 		unit/mongo/sync/sync_cmd_index_drop \
 		unit/mongo/sync/sync_cmd_index_drop_all \
-		unit/mongo/sync/sync_connect_from_cache_enforce_primary \
-        unit/mongo/sync/sync_ssl_complex
+		unit/mongo/sync/sync_connect_from_cache_enforce_primary 
 
 mongo_sync_func_tests	= \
 		func/mongo/sync/f_sync_max_insert_size \

@@ -13,7 +13,7 @@
 #define TRIPLEDES_CIPHERS "DES-CBC3-SHA"
 #define CAMELLIA_CIPHERS "CAMELLIA128-SHA"
 
-static gboolean mongo_ssl_lib_initialized = FALSE;
+//static gboolean mongo_ssl_lib_initialized = FALSE;
 static GStaticMutex *mongo_ssl_locks;
 static gint mongo_ssl_lock_count;
 
@@ -114,7 +114,6 @@ mongo_ssl_util_cleanup_lib ()
   EVP_cleanup ();
   CRYPTO_cleanup_all_ex_data ();
   crypto_deinit_threading ();
-  mongo_ssl_lib_initialized = FALSE;
 }
 
 static void
@@ -147,6 +146,7 @@ mongo_ssl_conf_init (mongo_ssl_ctx* c)
   c->crl_path = NULL;
   c->key_path = NULL;
   c->key_pw = NULL;
+  c->session_cache = NULL;
 
   if (c->ctx == NULL) 
     {
@@ -159,7 +159,16 @@ mongo_ssl_conf_init (mongo_ssl_ctx* c)
         }
            
       SSL_CTX_set_options(c->ctx, 
-        SSL_OP_NO_SSLv2 | SSL_OP_NO_COMPRESSION | SSL_OP_ALL | SSL_OP_SINGLE_DH_USE | SSL_OP_EPHEMERAL_RSA);
+                          SSL_OP_NO_SSLv2 | 
+                          SSL_OP_NO_COMPRESSION | 
+                          SSL_OP_ALL | 
+                          SSL_OP_SINGLE_DH_USE | 
+                          SSL_OP_EPHEMERAL_RSA);
+
+      SSL_CTX_set_session_cache_mode (c->ctx, SSL_SESS_CACHE_CLIENT);
+      
+      if (SSL_CTX_set_session_id_context (c->ctx, "libmongo-client", SSL_MAX_SSL_SESSION_ID_LENGTH) != 1)
+        printf ("SSL_CTX_set_session_id_context failed\n");
 
       if (!SSL_CTX_set_cipher_list (c->ctx, HIGH_CIPHERS))
         {
@@ -189,6 +198,17 @@ mongo_ssl_conf_init (mongo_ssl_ctx* c)
   return TRUE;
 }
 
+static void
+free_session_cache_element (gpointer p)
+{
+  mongo_ssl_session_cache_entry *ent = (mongo_ssl_session_cache_entry *) p;
+  if (ent != NULL)
+    {
+      g_free (ent->target);
+      SSL_SESSION_free (ent->sess);
+    }
+}
+
 void
 mongo_ssl_conf_clear (mongo_ssl_ctx *c)
 {
@@ -201,6 +221,8 @@ mongo_ssl_conf_clear (mongo_ssl_ctx *c)
   g_free (c->cert_path); c->cert_path = NULL;
   g_free (c->key_path); c->key_path = NULL;
   g_free (c->key_pw); c->key_pw = NULL;
+  g_free (c->cipher_list); c->cipher_list = NULL;
+  g_list_free_full (c->session_cache, free_session_cache_element); c->session_cache = NULL;
 }
 
 static gboolean 
@@ -218,21 +240,22 @@ _file_exists (gchar *path)
 gboolean
 mongo_ssl_conf_set_ca (mongo_ssl_ctx *c, gchar *ca_path) 
 {
-  assert(c != NULL);
-  assert(c->ctx != NULL);
-  assert(ca_path != NULL);
+  assert (c != NULL);
+  assert (c->ctx != NULL);
+  assert (ca_path != NULL);
 
-  if (!_file_exists (ca_path)) return 0;
+  if (!_file_exists (ca_path)) return FALSE;
 
   if (!SSL_CTX_load_verify_locations (c->ctx, ca_path, NULL))
     {
       if (!SSL_CTX_load_verify_locations (c->ctx, NULL, ca_path))
         {
-          c->last_ssl_error = ERR_peek_last_error();
+          c->last_ssl_error = ERR_peek_last_error ();
           return FALSE;
         }
     }
 
+  g_free (c->ca_path);
   c->ca_path = g_strdup (ca_path);
   
   return TRUE;
@@ -250,9 +273,9 @@ mongo_ssl_conf_get_ca (const mongo_ssl_ctx *c)
 gboolean
 mongo_ssl_conf_set_cert (mongo_ssl_ctx *c, gchar *cert_path) 
 {
-  assert(c != NULL);
-  assert(c->ctx != NULL);
-  assert(cert_path != NULL);
+  assert (c != NULL);
+  assert (c->ctx != NULL);
+  assert (cert_path != NULL);
 
   if (!_file_exists (cert_path)) return FALSE;
 
@@ -264,6 +287,8 @@ mongo_ssl_conf_set_cert (mongo_ssl_ctx *c, gchar *cert_path)
           return FALSE;
         }
     }
+
+  g_free (c->cert_path);
 
   c->cert_path = g_strdup (cert_path);
 
@@ -320,10 +345,13 @@ mongo_ssl_conf_set_key (mongo_ssl_ctx *c, gchar *key_path, char *key_pw)
   assert (c != NULL);
   assert (c->ctx != NULL);
   assert (key_path != NULL);
+  
+  EVP_PKEY* private_key = NULL;
+  gboolean ok = TRUE;
 
   if (!_file_exists (key_path)) return FALSE;
     
-  if (key_pw == NULL)
+  if ((key_pw == NULL) || (strlen (key_pw) == 0))
     {
       if (!SSL_CTX_use_PrivateKey_file (c->ctx, key_path, SSL_FILETYPE_PEM))
         {
@@ -335,43 +363,55 @@ mongo_ssl_conf_set_key (mongo_ssl_ctx *c, gchar *key_path, char *key_pw)
   else
     {
       FILE* pKeyFile = fopen (key_path, "r");
+
       if (pKeyFile == NULL)
         {
           errno = ENOENT;
-          return FALSE;
+          ok = FALSE;
         }
         
-      EVP_PKEY* private_key = PEM_read_PrivateKey (pKeyFile, NULL, NULL, key_pw);
-      if (private_key == NULL) 
+      private_key = PEM_read_PrivateKey (pKeyFile, NULL, NULL, key_pw);
+      
+      if (private_key == NULL)
         {
           c->last_ssl_error = ERR_peek_last_error ();
-          return FALSE;
-        }
-                
-      if (!SSL_CTX_use_PrivateKey (c->ctx, private_key)) 
+          ok = FALSE;
+        }     
+      else if (!SSL_CTX_use_PrivateKey (c->ctx, private_key))
         {
           c->last_ssl_error = ERR_peek_last_error ();
-          return FALSE;
+          ok = FALSE;
         }
                 
-      fclose(pKeyFile);
+      if (pKeyFile != NULL) fclose(pKeyFile);
     }
 
-  if (!SSL_CTX_check_private_key (c->ctx))
+  if ( ok )
     {
-      c->last_ssl_error = ERR_peek_last_error ();
-      return FALSE;
-    }
+      if (!SSL_CTX_check_private_key (c->ctx))
+        {
+          c->last_ssl_error = ERR_peek_last_error ();
+          ok = FALSE;
+        }
     
-  c->key_path = g_strdup (key_path);
-    
-  if (key_pw != NULL) 
-    {
-      c->key_pw = g_strdup (key_pw);
-      mlock (c->key_pw, strlen (key_pw) + 1);
+      if ( ok ) 
+       {
+         g_free (c->key_path); c->key_path = NULL;
+
+         c->key_path = g_strdup (key_path);
+
+         if (key_pw != NULL)
+           {
+             g_free (c->key_pw); c->key_pw = NULL;
+
+             c->key_pw = g_strdup (key_pw);
+             mlock (c->key_pw, strlen (key_pw) + 1);
+           }
+       }
     }
 
-  return TRUE;
+  EVP_PKEY_free (private_key);
+  return ok;
 }
 
 gchar*
@@ -598,6 +638,6 @@ const gchar *
 mongo_ssl_last_error (mongo_ssl_ctx *c)
 {
   assert (c != NULL);
-  return (const gchar*) ERR_error_string (c->last_ssl_error, NULL);;
+  return (const gchar*) ERR_error_string (c->last_ssl_error, NULL);
 }
 

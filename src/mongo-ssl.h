@@ -38,38 +38,41 @@ G_BEGIN_DECLS
 
 /** Available cipher sets supported by MongoDB (as of 2.6). Use MONGO_SSL_CIPHERS_DEFAULT unless you have a strong reason to use a different option **/
 typedef enum {
-    MONGO_SSL_CIPHERS_DEFAULT,
-    MONGO_SSL_CIPHERS_AES,
-    MONGO_SSL_CIPHERS_3DES,
-    MONGO_SSL_CIPHERS_CAMELLIA
+  MONGO_SSL_CIPHERS_DEFAULT,
+  MONGO_SSL_CIPHERS_AES,
+  MONGO_SSL_CIPHERS_3DES,
+  MONGO_SSL_CIPHERS_CAMELLIA
 } mongo_ssl_ciphers;
+
+typedef struct {
+  gchar *target;
+  SSL_SESSION *sess;
+} mongo_ssl_session_cache_entry;
 
 /** An internal context structure that is a wrapper for the SSL_CTX object. It also stores configuration parameters and last SSL related error code from the OpenSSL library. Multiple threads may use the same mongo_ssl_ctx, but only one should manipulate it
 via setter functions at a time! (The internal SSL_CTX object is made thread-safe by the library, but the data fields in mongo_ssl_ctx are not so multiple writes from different threads may introduce inconsistency between these values in mongo_ssl_ctx and the actual state of the internal SSL_CTX object) **/
 typedef struct {
-    gchar *ca_path;
-    gchar *cert_path;
-    gchar *crl_path; 
-    gchar *key_path;
-    gchar *cipher_list;  
-    gchar *key_pw;
-    int verify_depth;
+  gchar *ca_path;
+  gchar *cert_path;
+  gchar *crl_path; 
+  gchar *key_path;
+  gchar *cipher_list;  
+  gchar *key_pw;
+  int verify_depth;
 
-    SSL_CTX *ctx;
-    X509_VERIFY_PARAM *params;
-    long last_ssl_error;
-    //GStaticMutex __guard; // not used yet, see docs (do we need it??)
+  SSL_CTX *ctx;
+  X509_VERIFY_PARAM *params;
+  long last_ssl_error;
+  //GStaticMutex __guard; // not used yet, see docs (do we need it??)
+  GList *session_cache;
 } mongo_ssl_ctx;
 
 /** An SSL connection wrapper that consist of a connection (SSL) object and a bidirectional I/O object (BIO) that represents the channel itself. Never manipulate a mongo_ssl_conn object manually! **/
 typedef struct {
-    BIO* bio;
-    SSL* conn;
-    mongo_ssl_ctx *super;
+  BIO* bio;
+  SSL* conn;
+  mongo_ssl_ctx *super;
 } mongo_ssl_conn;
-
-
-
 
 /** Initializes OpenSSL for you
  * 
