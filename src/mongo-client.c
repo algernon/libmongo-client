@@ -211,6 +211,7 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
   mongo_ssl_session_cache_entry *se = NULL;
   gboolean reused_session = FALSE;
   gchar *t = NULL;
+  mongo_ssl_verify_result rstat = MONGO_SSL_V_UNDEF;
 
   if ((bio = BIO_new_ssl_connect (conf->ctx)) == NULL) 
     {
@@ -255,7 +256,6 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
 
   if (BIO_do_connect (bio) != 1) 
     {
-      printf ("connect failed\n");
       goto error;
     }
 
@@ -270,7 +270,10 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
         }
     }
   
-  if ((mongo_ssl_verify_session (ssl, bio)) != 1) 
+  rstat = mongo_ssl_verify_session (ssl, bio, conf);
+  conf->last_verify_result = rstat;
+
+  if ( ! (MONGO_SSL_SESSION_OK(rstat))  ) 
     {
       goto error;
     }
@@ -285,6 +288,7 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
   conn->ssl = g_new0 (mongo_ssl_conn, 1); 
   conn->ssl->bio = bio;
   conn->ssl->conn = ssl;
+  conn->ssl->verification_status = rstat;
   conn->ssl->super = conf;
 
   mongo_connection_set_timeout (conn, 2500); // try to set a lower default timeout

@@ -73,15 +73,10 @@ crypto_deinit_threading(void)
 gboolean 
 mongo_ssl_set_auto_retry (mongo_ssl_ctx *c, gboolean auto_retry)
 {
-  assert (c != NULL);
+  g_assert (c != NULL);
+  g_assert (c->ctx != NULL);
 
   glong mode_new, mode_curr;
-    
-  if (c->ctx == NULL)
-    {
-      errno = EINVAL;
-      return FALSE;
-    }
 
   mode_curr = SSL_CTX_get_mode (c->ctx);
 
@@ -147,6 +142,10 @@ mongo_ssl_conf_init (mongo_ssl_ctx* c)
   c->key_path = NULL;
   c->key_pw = NULL;
   c->session_cache = NULL;
+  c->trusted_fingerprints = NULL;
+  c->trusted_DNs = NULL;
+  c->trust_required = TRUE;
+  c->last_verify_result = MONGO_SSL_V_UNDEF;
 
   if (c->ctx == NULL) 
     {
@@ -190,12 +189,48 @@ mongo_ssl_conf_init (mongo_ssl_ctx* c)
            *  --> Handshake may complete before hostname checks
            *  --> X509_V_ERR_CERT_CHAIN_TOO_LONG cannot be detected properly
           **/
-      c->verify_depth = MONGO_SSL_CERT_CHAIN_VERIFY_DEPTH;
-      SSL_CTX_set_verify_depth (c->ctx, c->verify_depth); 
+      
+      
+      mongo_ssl_conf_set_verify_depth (c, MONGO_SSL_CERT_CHAIN_VERIFY_DEPTH);
+      
       mongo_ssl_set_auto_retry (c, TRUE);
     }
 
   return TRUE;
+}
+
+void 
+mongo_ssl_conf_set_verify_depth (mongo_ssl_ctx *c, guint depth)
+{
+  g_assert (c != NULL);
+
+  c->verify_depth = depth;
+  SSL_CTX_set_verify_depth (c->ctx, depth);
+}
+
+guint
+mongo_ssl_conf_get_verify_depth (const mongo_ssl_ctx *c)
+{
+  g_assert (c != NULL);
+
+  return c->verify_depth;
+}
+
+void
+mongo_ssl_conf_set_trust (mongo_ssl_ctx *c, gboolean required)
+{
+  g_assert (c != NULL);
+
+  c->trust_required = required;
+}
+
+
+gboolean
+mongo_ssl_conf_get_trust (const mongo_ssl_ctx *c)
+{
+  g_assert (c != NULL);
+
+  return c->trust_required;
 }
 
 static void
@@ -223,12 +258,16 @@ mongo_ssl_conf_clear (mongo_ssl_ctx *c)
   g_free (c->key_pw); c->key_pw = NULL;
   g_free (c->cipher_list); c->cipher_list = NULL;
   g_list_free_full (c->session_cache, free_session_cache_element); c->session_cache = NULL;
+  c->trusted_DNs = NULL;
+  c->trusted_fingerprints = NULL;
 }
 
 static gboolean 
 _file_exists (gchar *path)
 {
   struct stat s;
+  if (path == NULL) return FALSE;
+
   if (stat ((const char*) path, &s) != 0)
     {
       return FALSE; // errno is set
@@ -240,9 +279,9 @@ _file_exists (gchar *path)
 gboolean
 mongo_ssl_conf_set_ca (mongo_ssl_ctx *c, gchar *ca_path) 
 {
-  assert (c != NULL);
-  assert (c->ctx != NULL);
-  assert (ca_path != NULL);
+  g_assert (c != NULL);
+  g_assert (c->ctx != NULL);
+  g_assert (ca_path != NULL);
 
   if (!_file_exists (ca_path)) return FALSE;
 
@@ -264,8 +303,8 @@ mongo_ssl_conf_set_ca (mongo_ssl_ctx *c, gchar *ca_path)
 gchar*
 mongo_ssl_conf_get_ca (const mongo_ssl_ctx *c)
 {
-  assert (c != NULL);
-  assert (c->ctx != NULL);
+  g_assert (c != NULL);
+  g_assert (c->ctx != NULL);
 
   return c->ca_path;
 }
@@ -273,9 +312,9 @@ mongo_ssl_conf_get_ca (const mongo_ssl_ctx *c)
 gboolean
 mongo_ssl_conf_set_cert (mongo_ssl_ctx *c, gchar *cert_path) 
 {
-  assert (c != NULL);
-  assert (c->ctx != NULL);
-  assert (cert_path != NULL);
+  g_assert (c != NULL);
+  g_assert (c->ctx != NULL);
+  g_assert (cert_path != NULL);
 
   if (!_file_exists (cert_path)) return FALSE;
 
@@ -298,8 +337,8 @@ mongo_ssl_conf_set_cert (mongo_ssl_ctx *c, gchar *cert_path)
 gchar*
 mongo_ssl_conf_get_cert (const mongo_ssl_ctx *c)
 {
-  assert (c != NULL);
-  assert (c->ctx != NULL);
+  g_assert (c != NULL);
+  g_assert (c->ctx != NULL);
 
   return c->cert_path;
 }
@@ -307,9 +346,9 @@ mongo_ssl_conf_get_cert (const mongo_ssl_ctx *c)
 gboolean
 mongo_ssl_conf_set_crl (mongo_ssl_ctx *c, gchar *crl_path) 
 {
-    assert (c != NULL);
-    assert (c->ctx != NULL);
-    assert (crl_path != NULL);
+    g_assert (c != NULL);
+    g_assert (c->ctx != NULL);
+    g_assert (crl_path != NULL);
 
     if (!_file_exists (crl_path)) return FALSE;
 
@@ -333,8 +372,8 @@ mongo_ssl_conf_set_crl (mongo_ssl_ctx *c, gchar *crl_path)
 gchar*
 mongo_ssl_conf_get_crl (const mongo_ssl_ctx *c)
 {
-  assert (c != NULL);
-  assert (c->ctx != NULL);
+  g_assert (c != NULL);
+  g_assert (c->ctx != NULL);
 
   return c->crl_path;
 }
@@ -342,9 +381,9 @@ mongo_ssl_conf_get_crl (const mongo_ssl_ctx *c)
 gboolean
 mongo_ssl_conf_set_key (mongo_ssl_ctx *c, gchar *key_path, char *key_pw) 
 {
-  assert (c != NULL);
-  assert (c->ctx != NULL);
-  assert (key_path != NULL);
+  g_assert (c != NULL);
+  g_assert (c->ctx != NULL);
+  g_assert (key_path != NULL);
   
   EVP_PKEY* private_key = NULL;
   gboolean ok = TRUE;
@@ -417,8 +456,8 @@ mongo_ssl_conf_set_key (mongo_ssl_ctx *c, gchar *key_path, char *key_pw)
 gchar*
 mongo_ssl_conf_get_key (const mongo_ssl_ctx *c)
 {
-  assert (c != NULL);
-  assert (c->ctx != NULL);
+  g_assert (c != NULL);
+  g_assert (c->ctx != NULL);
 
   return c->key_path;
 }
@@ -426,8 +465,8 @@ mongo_ssl_conf_get_key (const mongo_ssl_ctx *c)
 gboolean 
 mongo_ssl_conf_set_ciphers (mongo_ssl_ctx *c, mongo_ssl_ciphers ciphers) 
 {
-  assert (c != NULL);
-  assert (c->ctx != NULL);
+  g_assert (c != NULL);
+  g_assert (c->ctx != NULL);
   
   gboolean ok = TRUE;
   gchar *cipher_list = NULL;
@@ -465,8 +504,8 @@ mongo_ssl_conf_set_ciphers (mongo_ssl_ctx *c, mongo_ssl_ciphers ciphers)
 mongo_ssl_ciphers
 mongo_ssl_conf_get_ciphers (const mongo_ssl_ctx *c)
 {
-  assert (c != NULL);
-  assert (c->ctx != NULL);
+  g_assert (c != NULL);
+  g_assert (c->ctx != NULL);
 
   if (strcmp (c->cipher_list, AES_CIPHERS) == 0)
     return MONGO_SSL_CIPHERS_AES;
@@ -480,9 +519,28 @@ mongo_ssl_conf_get_ciphers (const mongo_ssl_ctx *c)
    assert (FALSE); // the structure has been manipulated by hand
 }
 
+void 
+mongo_ssl_conf_set_trusted_fingerprints (mongo_ssl_ctx *c, GList *fingerprints)
+{
+  g_assert (c != NULL);
+
+  c->trusted_fingerprints = fingerprints;
+}
+
+GList*
+mongo_ssl_conf_get_trusted_fingerprints (const mongo_ssl_ctx *c)
+{
+  g_assert (c != NULL);
+
+  return c->trusted_fingerprints;
+}
+
 static void
 _get_dn (X509_NAME *name, GString *dn)
 {
+  g_assert (name != NULL);
+  g_assert (dn != NULL);
+  
   BIO *bio;
   gchar *buf;
   long len;
@@ -499,6 +557,9 @@ _get_dn (X509_NAME *name, GString *dn)
 static gboolean
 check_dn (const X509 *cert, const gchar *target_hostname)
 {
+  g_assert (cert != NULL);
+  g_assert (target_hostname != NULL);
+
   gboolean sni_match = FALSE;
   int i = 0;
   gchar **dn_parts;
@@ -556,6 +617,9 @@ check_dn (const X509 *cert, const gchar *target_hostname)
 static gboolean
 check_altnames (const X509 *cert, const gchar *target_hostname)
 {
+  g_assert (cert != NULL);
+  g_assert (target_hostname != NULL);
+  
   int i, num = -1;
   STACK_OF (GENERAL_NAME) *names = NULL;
   gboolean sni_match = FALSE;
@@ -593,10 +657,55 @@ check_altnames (const X509 *cert, const gchar *target_hostname)
   return sni_match;
 }
 
-int
-mongo_ssl_verify_session (SSL *c, BIO *b) {
-  assert (c != NULL);
-  assert (b != NULL);
+static gboolean
+_get_X509_digest(const X509 *x, GString *hash_string)
+{
+  gint j;
+  unsigned int n;
+  unsigned char md[EVP_MAX_MD_SIZE];
+  g_assert(hash_string);
+
+  if (!X509_digest(x, EVP_sha1(), md, &n))
+    return FALSE;
+
+  g_string_append(hash_string, "SHA1:");
+  for (j = 0; j < (int) n; j++)
+    g_string_append_printf(hash_string, "%02X%c", md[j], (j + 1 == (int) n) ?'\0' : ':');
+
+  return TRUE;
+}
+
+static gboolean 
+check_fingerprint (const X509* cert, const mongo_ssl_ctx *c)
+{
+  g_assert (c != NULL);
+  GString *hash = g_string_sized_new (EVP_MAX_MD_SIZE * 3);
+  GList *curr_fingerprint = c->trusted_fingerprints;
+  gboolean match = FALSE;
+
+  
+  if (_get_X509_digest (cert, hash) && curr_fingerprint)
+    {
+      for (; curr_fingerprint != NULL; curr_fingerprint = g_list_next (curr_fingerprint))
+        {
+          if (strncasecmp ((const gchar *) (curr_fingerprint->data), hash->str, hash->len) == 0)
+            {
+              match = TRUE;
+              break;
+            }
+        }
+    }
+
+  g_string_free (hash, TRUE);
+
+  return match;
+}
+
+mongo_ssl_verify_result
+mongo_ssl_verify_session (SSL *c, BIO *b, mongo_ssl_ctx *ctx) {
+  g_assert (c != NULL);
+  g_assert (b != NULL);
+  g_assert (ctx != NULL);
 
   X509 *cert;
   char *target_hostname;
@@ -607,37 +716,69 @@ mongo_ssl_verify_session (SSL *c, BIO *b) {
   cert = SSL_get_peer_certificate (c);
   target_hostname = BIO_get_conn_hostname (b);
     
-  if (cert == NULL)
+  // Trust required -> we need certificate and validation
+  if (ctx->trust_required && (cert == NULL))
     {
-      return -1;
+      return MONGO_SSL_V_ERR_NO_CERT;
     }
 
-  if (target_hostname == NULL)
+  // Trust is not required -> we only need a certificate (valid or not)
+  if (!ctx->trust_required)
     {
-      errno = EINVAL;
-      return -4;
+      if (cert != NULL) return MONGO_SSL_V_OK_NO_VERIFY;
+      else return MONGO_SSL_V_ERR_NO_CERT;
     }
 
+  // Fingerprint whitelisting
+  // IMPORTANT: When the received fingerprint is not present on the list: drop the connection, however, when it is,
+  // accept the certificate without validation
+  if (ctx->trusted_fingerprints)
+    {
+      if (!check_fingerprint (cert, ctx)) 
+        return MONGO_SSL_V_ERR_UNTRUSTED_FP;
+      else
+        return MONGO_SSL_V_OK_TRUSTED_FP;
+    }
 
+  // TODO: DN whitelisting
+
+  // Built-in check (signature, expiration, CRL, etc.)
   if ((err = SSL_get_verify_result (c)) != X509_V_OK)
     {
-      return -2;
+      if (err != X509_V_ERR_INVALID_PURPOSE) // ignore invalid purpose errors (that's bullshit...:))
+        return MONGO_SSL_V_ERR_PROTO;
     }
 
-  sni_match = (check_dn (cert, target_hostname)) || (check_altnames (cert, target_hostname));
-
-  if (! sni_match) 
+  // Hostname check
+  if (target_hostname != NULL)
     {
-      return -3;
+      sni_match = (check_dn (cert, target_hostname)) || (check_altnames (cert, target_hostname));
+
+      if (! sni_match) 
+        {
+          return MONGO_SSL_V_ERR_SNI;
+        }
+    } 
+  else
+    {
+      return MONGO_SSL_V_OK_NO_HOSTNAME;
     }
 
-  return 1;
+  return MONGO_SSL_V_OK_ALL;
 }
 
 const gchar *
-mongo_ssl_last_error (mongo_ssl_ctx *c)
+mongo_ssl_get_last_error (const mongo_ssl_ctx *c)
 {
-  assert (c != NULL);
+  g_assert (c != NULL);
+
   return (const gchar*) ERR_error_string (c->last_ssl_error, NULL);
 }
 
+mongo_ssl_verify_result 
+mongo_ssl_get_last_verify_result (const mongo_ssl_ctx *c)
+{
+  g_assert (c != NULL);
+
+  return c->last_verify_result;
+}

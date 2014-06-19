@@ -44,6 +44,31 @@ typedef enum {
   MONGO_SSL_CIPHERS_CAMELLIA
 } mongo_ssl_ciphers;
 
+typedef enum {
+  /** Verification is not done yet - no result available **/
+  MONGO_SSL_V_UNDEF = 1,
+  /** The peer has not presented a certificate despite it is required **/
+  MONGO_SSL_V_ERR_NO_CERT = 2,
+  /** Hostname verification failed **/
+  MONGO_SSL_V_ERR_SNI = 3,
+  /** Trusted fingerprints list specified, but the received fingerprint is not on the list **/
+  MONGO_SSL_V_ERR_UNTRUSTED_FP = 4,
+  /** Trusted DNs list specified, but the received DN is not on the list **/
+  MONGO_SSL_V_ERR_UNTRUSTED_DN = 5,
+  /** Certificate chain verification failed (see last_ssl_error for details) **/
+  MONGO_SSL_V_ERR_PROTO = 10,
+  /** Session verified OK, because the certificate fingerprint is on trusted list (certificate MAY be invalid) **/
+  MONGO_SSL_V_OK_TRUSTED_FP = 11,
+  /** Session verified OK, but hostname verification has been skipped due to the inability to resolve the server's address **/
+  MONGO_SSL_V_OK_NO_HOSTNAME = 12,
+  /** Session verified OK, but only because any X509 certificate is automatically trusted**/
+  MONGO_SSL_V_OK_NO_VERIFY = 13,
+  /** Session verified OK - all checks passed **/
+  MONGO_SSL_V_OK_ALL = 14
+} mongo_ssl_verify_result;
+
+#define MONGO_SSL_SESSION_OK(s) ( ((int) s > (int) MONGO_SSL_V_ERR_PROTO) )
+
 typedef struct {
   gchar *target;
   SSL_SESSION *sess;
@@ -63,14 +88,19 @@ typedef struct {
   SSL_CTX *ctx;
   X509_VERIFY_PARAM *params;
   long last_ssl_error;
+  mongo_ssl_verify_result last_verify_result;
   //GStaticMutex __guard; // not used yet, see docs (do we need it??)
   GList *session_cache;
+  GList *trusted_fingerprints;
+  GList *trusted_DNs;
+  gboolean trust_required;
 } mongo_ssl_ctx;
 
 /** An SSL connection wrapper that consist of a connection (SSL) object and a bidirectional I/O object (BIO) that represents the channel itself. Never manipulate a mongo_ssl_conn object manually! **/
 typedef struct {
   BIO* bio;
   SSL* conn;
+  mongo_ssl_verify_result verification_status;
   mongo_ssl_ctx *super;
 } mongo_ssl_conn;
 
@@ -104,10 +134,41 @@ gboolean mongo_ssl_conf_init (mongo_ssl_ctx *ctx);
  *
  * Resets a mongo_ssl_ctx object to its default state. Please note, that this function deallocates all internal
  * objects, so you should call mongo_ssl_conf_init () again if you want to re-use the object. It also implies, that
- * the structure itself does not get deallocated - that is the responsiblity of the user as well as allocation.
+ * the structure itself does not get deallocated - that is the responsiblity of the user as well as allocation. Also, 
+ * trusted fingerprints and DNs lists do not get deallocated, however their pointers get reset, so you need another pointer
+ * refering to them so you can deallocate them properly if needed - this is the responsibility of the caller.
  * @param ctx A valid pointer to a properly allocated mongo_ssl_ctx structure
 **/
 void mongo_ssl_conf_clear (mongo_ssl_ctx *ctx);
+
+/** Sets trusted DNs list
+ *
+ * If set, the client only accepts certificates containing a DN matching one of those in the list. Actually, it only 
+ * sets an internal pointer to the given address (no deep copy). The validity of that address and the data located in 
+ * there is the responsibility of the caller. This implies, that you may pass NULL as well, to 'clear' the list.
+ * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
+ * @param DNs A list of g_char* strings storing trusted distinguished names
+**/
+void mongo_ssl_conf_set_trusted_DNs (mongo_ssl_ctx *ctx, GList *DNs);
+
+/** Gets the trusted DNs list
+ * @returns A pointer to the first element of the list (may be NULL)
+**/
+GList *mongo_ssl_conf_get_trusted_DNs ();
+
+/** Sets trusted fingerprints list
+ * If set, the client only accepts certificates having one of those SHA-1 fingerprints on the list. Actually, it only 
+ * sets an internal pointer to the given address (no deep copy). The validity of that address and the data located in 
+ * there is the responsibility of the caller. This implies, that you may pass NULL as well, to 'clear' the list.
+ * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
+ * @param fingerprints A list of g_char* strings storing trusted SHA-1 fingerprints; each one is required to be in the following format: SHA1:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX 
+**/
+void mongo_ssl_conf_set_trusted_fingerprints (mongo_ssl_ctx *ctx, GList *fingerprints);
+
+/** Retrieves trusted fingerprints list
+ * @returns A pointer to the first element of the list (may be NULL)
+**/
+GList *mongo_ssl_conf_get_trusted_fingerprints (const mongo_ssl_ctx *ctx);
 
 /** Sets CA (Certificate Authority) certificate file path
  * 
@@ -218,15 +279,21 @@ gboolean mongo_ssl_set_auto_retry (mongo_ssl_ctx *ctx, gboolean auto_retry);
  * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
  * @return An OpenSSL error string (should never be NULL)
 **/
-const gchar* mongo_ssl_last_error (mongo_ssl_ctx *ctx);
+const gchar* mongo_ssl_get_last_error (const mongo_ssl_ctx *ctx);
+
+mongo_ssl_verify_result mongo_ssl_get_last_verify_result (const mongo_ssl_ctx *ctx);
 
 /** Sets maximal depth of certificate chain verification
  *
  * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
  * @param depth Maximal verification depth
- * @returns TRUE on success, FALSE on failure
 **/
-gboolean mongo_ssl_conf_set_verify_depth (mongo_ssl_ctx *ctx, gint depth);
+void mongo_ssl_conf_set_verify_depth (mongo_ssl_ctx *ctx, guint depth);
+
+guint mongo_ssl_conf_get_verify_depth (const mongo_ssl_ctx *ctx);
+
+void mongo_ssl_conf_set_trust (mongo_ssl_ctx *ctx, gboolean required);
+gboolean mongo_ssl_conf_get_trust (const mongo_ssl_ctx *ctx);
 
 /** Performs session verification
  *
@@ -234,10 +301,8 @@ gboolean mongo_ssl_conf_set_verify_depth (mongo_ssl_ctx *ctx, gint depth);
  * (fingerprint, expiration, CRL, recursive...) and SNI (based on either CN and SubjectAltNames) for the
  * first certificate in the chain. This function is called from mongo_ssl_connect () right after the handshake.
  * Do not call this function directly.
- * @param c A pointer to the SSL object representing the connection
- * @param b A pointer to a BIO object representing the channel
 **/
-int mongo_ssl_verify_session (SSL *c, BIO *b); 
+mongo_ssl_verify_result mongo_ssl_verify_session (SSL*, BIO*, mongo_ssl_ctx*); 
 
 G_END_DECLS
 
