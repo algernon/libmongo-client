@@ -7,26 +7,28 @@
 
 #include <sys/stat.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #define HIGH_CIPHERS "HIGH"
 #define AES_CIPHERS "AES256-GCM-SHA384:AES256-SHA256:AES128-GCM-SHA384:AES128-SHA-256:AES256-SHA:AES128-SHA"
 #define TRIPLEDES_CIPHERS "DES-CBC3-SHA"
 #define CAMELLIA_CIPHERS "CAMELLIA128-SHA"
 
-//static gboolean mongo_ssl_lib_initialized = FALSE;
-static GStaticMutex *mongo_ssl_locks;
+static GStaticMutex *mongo_ssl_locks; // Internal mutexes for OpenSSL functions
 static gint mongo_ssl_lock_count;
-
-//#define LOCK(ctx) { g_static_mutex_lock (&ctx->__guard)
-//#define UNLOCK(ctx) g_static_mutex_unlock (&ctx->__guard); }
-
 
 // FIXME: Some portions come from the syslog-ng source code (to merge or not to merge, that is the question...)
 
 static unsigned long
 ssl_thread_id () 
 {
-  return (unsigned long) pthread_self (); // TODO: For now, I did not bother myself with Windows
+  #ifdef _WIN32
+  return (unsigned long) GetCurrentThreadId ();
+  #else
+  return (unsigned long) pthread_self ();
+  #endif
 }
 
 static void 
@@ -136,6 +138,7 @@ mongo_ssl_util_init_lib ()
 gboolean
 mongo_ssl_conf_init (mongo_ssl_ctx* c) 
 {
+  g_static_mutex_init (&c->__guard);
   c->ca_path = NULL;
   c->cert_path = NULL;
   c->crl_path = NULL;
@@ -535,8 +538,24 @@ mongo_ssl_conf_get_trusted_fingerprints (const mongo_ssl_ctx *c)
   return c->trusted_fingerprints;
 }
 
+void
+mongo_ssl_conf_set_trusted_DNs (mongo_ssl_ctx *c, GList *DNs)
+{
+  g_assert (c != NULL);
+
+  c->trusted_DNs = DNs;
+}
+
+GList*
+mongo_ssl_conf_get_trusted_DNs (const mongo_ssl_ctx *c)
+{
+  g_assert (c != NULL);
+
+  return c->trusted_DNs;
+}
+
 static void
-_get_dn (X509_NAME *name, GString *dn)
+_get_dn (X509_NAME *name, GString *dn, gboolean reverse)
 {
   g_assert (name != NULL);
   g_assert (dn != NULL);
@@ -546,7 +565,11 @@ _get_dn (X509_NAME *name, GString *dn)
   long len;
 
   bio = BIO_new (BIO_s_mem ());
-  X509_NAME_print_ex (bio, name, 0, ASN1_STRFLGS_ESC_2253 | ASN1_STRFLGS_UTF8_CONVERT | XN_FLAG_SEP_CPLUS_SPC | XN_FLAG_DN_REV);
+  X509_NAME_print_ex (bio, name, 0, 
+                      ASN1_STRFLGS_ESC_2253 | 
+                      ASN1_STRFLGS_UTF8_CONVERT | 
+                      XN_FLAG_SEP_CPLUS_SPC | 
+                      (reverse ? XN_FLAG_DN_REV : 0));
   len = BIO_get_mem_data (bio, &buf);
   g_string_truncate (dn, 0);
   g_string_append_len (dn, buf, len);
@@ -555,7 +578,7 @@ _get_dn (X509_NAME *name, GString *dn)
 
 
 static gboolean
-check_dn (const X509 *cert, const gchar *target_hostname)
+check_cn (const X509 *cert, const gchar *target_hostname)
 {
   g_assert (cert != NULL);
   g_assert (target_hostname != NULL);
@@ -569,7 +592,7 @@ check_dn (const X509 *cert, const gchar *target_hostname)
   GString *dn;
 
   dn = g_string_sized_new (128);
-  _get_dn (X509_get_subject_name ((X509*) cert), dn);
+  _get_dn (X509_get_subject_name ((X509*) cert), dn, TRUE);  
     
   dn_parts = g_strsplit (dn->str, ",", 0);
   curr_field = dn_parts[0];
@@ -653,7 +676,8 @@ check_altnames (const X509 *cert, const gchar *target_hostname)
     }
 
   if (t != target_hostname) g_free (t);
-  
+  sk_GENERAL_NAME_free (names);
+
   return sni_match;
 }
 
@@ -679,6 +703,8 @@ static gboolean
 check_fingerprint (const X509* cert, const mongo_ssl_ctx *c)
 {
   g_assert (c != NULL);
+  g_assert (cert != NULL);
+  
   GString *hash = g_string_sized_new (EVP_MAX_MD_SIZE * 3);
   GList *curr_fingerprint = c->trusted_fingerprints;
   gboolean match = FALSE;
@@ -697,6 +723,47 @@ check_fingerprint (const X509* cert, const mongo_ssl_ctx *c)
     }
 
   g_string_free (hash, TRUE);
+
+  return match;
+}
+
+static gboolean
+check_dn (const X509 *cert, const mongo_ssl_ctx *c)
+{
+  g_assert (c != NULL);
+  g_assert (cert != NULL);
+
+  GString *dn, *dn_rev;
+  gchar* _dn, *_dn_rev, *t;
+  GList *curr_dn = c->trusted_DNs;
+  gboolean match = FALSE;
+
+  dn = g_string_sized_new (128);
+  _get_dn (X509_get_subject_name ((X509*) cert), dn, FALSE);
+  dn_rev = g_string_sized_new (128);
+  _get_dn (X509_get_subject_name ((X509*) cert), dn_rev, TRUE);
+  
+
+  _dn = g_utf8_casefold (dn->str, -1);
+  _dn_rev = g_utf8_casefold (dn_rev->str, -1);
+
+
+  for (; curr_dn != NULL; curr_dn = g_list_next (curr_dn))
+    {
+      t = g_utf8_casefold (curr_dn->data, -1); 
+
+      if (g_pattern_match_simple ((const gchar*) t, (const gchar*) _dn) ||
+          g_pattern_match_simple ((const gchar*) t, (const gchar*) _dn_rev))
+            {
+              match = TRUE;
+              break;
+            }
+       g_free (t);
+    }
+
+  g_string_free (dn, TRUE);
+  g_free (_dn);
+  g_free (_dn_rev);
 
   return match;
 }
@@ -740,7 +807,14 @@ mongo_ssl_verify_session (SSL *c, BIO *b, mongo_ssl_ctx *ctx) {
         return MONGO_SSL_V_OK_TRUSTED_FP;
     }
 
-  // TODO: DN whitelisting
+  // DN whitelisting
+  // IMPORTANT: When received DN is not present on the list: drop the connection, however, when it is, 
+  // continue certificate validation
+  if (ctx->trusted_DNs)
+    {
+      if (!check_dn (cert, ctx))
+        return MONGO_SSL_V_ERR_UNTRUSTED_DN;
+    }
 
   // Built-in check (signature, expiration, CRL, etc.)
   if ((err = SSL_get_verify_result (c)) != X509_V_OK)
@@ -752,7 +826,7 @@ mongo_ssl_verify_session (SSL *c, BIO *b, mongo_ssl_ctx *ctx) {
   // Hostname check
   if (target_hostname != NULL)
     {
-      sni_match = (check_dn (cert, target_hostname)) || (check_altnames (cert, target_hostname));
+      sni_match = (check_cn (cert, target_hostname)) || (check_altnames (cert, target_hostname));
 
       if (! sni_match) 
         {
@@ -781,4 +855,19 @@ mongo_ssl_get_last_verify_result (const mongo_ssl_ctx *c)
   g_assert (c != NULL);
 
   return c->last_verify_result;
+}
+
+void
+mongo_ssl_conf_lock (mongo_ssl_ctx *c)
+{
+  g_assert (c != NULL);
+
+  g_static_mutex_lock (&c->__guard);
+}
+
+void mongo_ssl_conf_unlock (mongo_ssl_ctx *c)
+{
+  g_assert (c != NULL);
+
+  g_static_mutex_unlock (&c->__guard);
 }

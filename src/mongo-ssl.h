@@ -34,7 +34,6 @@ G_BEGIN_DECLS
  * mongo_sync_ssl_connect () to establish a synchronous SSL connection to the MongoDB database.
 **/
 
-// TODO: Make mongo_ssl_ctx and mongo_ssl_conn thread safe !!!!
 
 /** Available cipher sets supported by MongoDB (as of 2.6). Use MONGO_SSL_CIPHERS_DEFAULT unless you have a strong reason to use a different option **/
 typedef enum {
@@ -75,7 +74,7 @@ typedef struct {
 } mongo_ssl_session_cache_entry;
 
 /** An internal context structure that is a wrapper for the SSL_CTX object. It also stores configuration parameters and last SSL related error code from the OpenSSL library. Multiple threads may use the same mongo_ssl_ctx, but only one should manipulate it
-via setter functions at a time! (The internal SSL_CTX object is made thread-safe by the library, but the data fields in mongo_ssl_ctx are not so multiple writes from different threads may introduce inconsistency between these values in mongo_ssl_ctx and the actual state of the internal SSL_CTX object) **/
+via setter functions at a time! (The internal SSL_CTX object is made thread-safe by the library, but the data fields in mongo_ssl_ctx are not so multiple writes from different threads may introduce inconsistency between these values in mongo_ssl_ctx and the actual state of the internal SSL_CTX object) However, you may use mongo_ssl_conf_lock () and mongo_ssl_conf_unlock () to engage mutual exclusion (not really efficient; I still recommend deep copying mongo_ssl_ctx objects, one copy for each thread).  **/
 typedef struct {
   gchar *ca_path;
   gchar *cert_path;
@@ -89,14 +88,14 @@ typedef struct {
   X509_VERIFY_PARAM *params;
   long last_ssl_error;
   mongo_ssl_verify_result last_verify_result;
-  //GStaticMutex __guard; // not used yet, see docs (do we need it??)
   GList *session_cache;
   GList *trusted_fingerprints;
   GList *trusted_DNs;
   gboolean trust_required;
+  GStaticMutex __guard;
 } mongo_ssl_ctx;
 
-/** An SSL connection wrapper that consist of a connection (SSL) object and a bidirectional I/O object (BIO) that represents the channel itself. Never manipulate a mongo_ssl_conn object manually! **/
+/** An SSL connection wrapper that consist of a connection (SSL) object and a bidirectional I/O object (BIO) that represents the channel itself. Never manipulate a mongo_ssl_conn object manually! Also note that this wrapper is not thread safe! One particular mongo_ssl_conn object should be manipulated only by one thread at a time. **/
 typedef struct {
   BIO* bio;
   SSL* conn;
@@ -303,6 +302,19 @@ gboolean mongo_ssl_conf_get_trust (const mongo_ssl_ctx *ctx);
  * Do not call this function directly.
 **/
 mongo_ssl_verify_result mongo_ssl_verify_session (SSL*, BIO*, mongo_ssl_ctx*); 
+
+/** Locks a mongo_ssl_ctx by calling g_static_mutex_lock ()
+ *
+ * The current thread blocks until it can acquire the lock.
+ * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
+**/
+void mongo_ssl_conf_lock (mongo_ssl_ctx *ctx);
+
+/** Unlocks a mongo_ssl_ctx by calling g_static_mutex_unlock ()
+ *
+ *  @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
+**/
+void mongo_ssl_conf_unlock (mongo_ssl_ctx *ctx);
 
 G_END_DECLS
 
