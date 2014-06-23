@@ -208,6 +208,7 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
   SSL *ssl = NULL;
   int fd, err;
   gboolean conn_ok = FALSE;
+  gboolean verify_ok = TRUE;
   mongo_ssl_session_cache_entry *se = NULL;
   gboolean reused_session = FALSE;
   gchar *t = NULL;
@@ -275,6 +276,7 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
 
   if ( ! (MONGO_SSL_SESSION_OK(rstat))  ) 
     {
+      verify_ok = FALSE;
       goto error;
     }
   
@@ -316,6 +318,9 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
 error:
   g_free (t);
   conf->last_ssl_error = ERR_peek_last_error ();
+  if (verify_ok)
+    conf->last_verify_result = MONGO_SSL_V_ERR_PROTO;
+  
   if (ssl != NULL)
     {
       if (conn_ok) 

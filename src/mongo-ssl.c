@@ -11,7 +11,7 @@
 #include <windows.h>
 #endif
 
-#define HIGH_CIPHERS "HIGH"
+#define HIGH_CIPHERS "HIGH:!EXPORT:!aNULL@STRENGTH"
 #define AES_CIPHERS "AES256-GCM-SHA384:AES256-SHA256:AES128-GCM-SHA384:AES128-SHA-256:AES256-SHA:AES128-SHA"
 #define TRIPLEDES_CIPHERS "DES-CBC3-SHA"
 #define CAMELLIA_CIPHERS "CAMELLIA128-SHA"
@@ -165,12 +165,7 @@ mongo_ssl_conf_init (mongo_ssl_ctx* c)
                           SSL_OP_NO_COMPRESSION | 
                           SSL_OP_ALL | 
                           SSL_OP_SINGLE_DH_USE | 
-                          SSL_OP_EPHEMERAL_RSA);
-
-      SSL_CTX_set_session_cache_mode (c->ctx, SSL_SESS_CACHE_CLIENT);
-      
-      if (SSL_CTX_set_session_id_context (c->ctx, "libmongo-client", SSL_MAX_SSL_SESSION_ID_LENGTH) != 1)
-        printf ("SSL_CTX_set_session_id_context failed\n");
+                          SSL_OP_EPHEMERAL_RSA); 
 
       if (!SSL_CTX_set_cipher_list (c->ctx, HIGH_CIPHERS))
         {
@@ -349,27 +344,32 @@ mongo_ssl_conf_get_cert (const mongo_ssl_ctx *c)
 gboolean
 mongo_ssl_conf_set_crl (mongo_ssl_ctx *c, gchar *crl_path) 
 {
-    g_assert (c != NULL);
-    g_assert (c->ctx != NULL);
-    g_assert (crl_path != NULL);
+  g_assert (c != NULL);
+  g_assert (c->ctx != NULL);
 
-    if (!_file_exists (crl_path)) return FALSE;
+  if (crl_path == NULL)
+    {
+      X509_VERIFY_PARAM_clear_flags (c->ctx->param, X509_V_FLAG_CRL_CHECK | X509_V_FLAG_EXTENDED_CRL_SUPPORT);
+      return TRUE;
+    }
 
-    if (!SSL_CTX_load_verify_locations (c->ctx, crl_path, NULL))
-      {
-        if (!SSL_CTX_load_verify_locations (c->ctx, NULL, crl_path))
-          {
-            c->last_ssl_error = ERR_peek_last_error ();
-            return FALSE;
-          }
-      }
-    
-    X509_VERIFY_PARAM* p = X509_VERIFY_PARAM_new ();
-    X509_VERIFY_PARAM_set_flags (p, X509_V_FLAG_CRL_CHECK | X509_V_FLAG_EXTENDED_CRL_SUPPORT); 
-    SSL_CTX_set1_param (c->ctx, p);
-    X509_VERIFY_PARAM_free (p);
-    
-    return TRUE;
+  if (!_file_exists (crl_path)) return FALSE;
+
+  if (!SSL_CTX_load_verify_locations (c->ctx, crl_path, NULL))
+    {
+      if (!SSL_CTX_load_verify_locations (c->ctx, NULL, crl_path))
+        {
+          c->last_ssl_error = ERR_peek_last_error ();
+           return FALSE;
+        }
+     }
+                                                              
+  X509_VERIFY_PARAM* p = X509_VERIFY_PARAM_new ();
+  X509_VERIFY_PARAM_set_flags (p, X509_V_FLAG_CRL_CHECK | X509_V_FLAG_EXTENDED_CRL_SUPPORT); 
+  SSL_CTX_set1_param (c->ctx, p);
+  X509_VERIFY_PARAM_free (p);
+                                                                                                            
+  return TRUE;
 }
 
 gchar*

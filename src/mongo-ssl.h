@@ -74,7 +74,7 @@ typedef struct {
 } mongo_ssl_session_cache_entry;
 
 /** An internal context structure that is a wrapper for the SSL_CTX object. It also stores configuration parameters and last SSL related error code from the OpenSSL library. Multiple threads may use the same mongo_ssl_ctx, but only one should manipulate it
-via setter functions at a time! (The internal SSL_CTX object is made thread-safe by the library, but the data fields in mongo_ssl_ctx are not so multiple writes from different threads may introduce inconsistency between these values in mongo_ssl_ctx and the actual state of the internal SSL_CTX object) However, you may use mongo_ssl_conf_lock () and mongo_ssl_conf_unlock () to engage mutual exclusion (not really efficient; I still recommend deep copying mongo_ssl_ctx objects, one copy for each thread).  **/
+via setter functions at a time! (The internal SSL_CTX object is made thread-safe by the library, but the data fields in mongo_ssl_ctx are not so multiple writes from different threads may introduce inconsistency between these values in mongo_ssl_ctx and the actual state of the internal SSL_CTX object) However, you may use mongo_ssl_conf_lock () and mongo_ssl_conf_unlock () to engage mutual exclusion (not really efficient; I still recommend deep copying mongo_ssl_ctx objects, one copy for each thread). Even better, call any setter functions sequentially, from one thread, then use the context from multiple threads simultaneously without locking.  **/
 typedef struct {
   gchar *ca_path;
   gchar *cert_path;
@@ -276,10 +276,17 @@ gboolean mongo_ssl_set_auto_retry (mongo_ssl_ctx *ctx, gboolean auto_retry);
  *
  * Gets the latest OpenSSL library error message
  * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
- * @return An OpenSSL error string (should never be NULL)
+ * @returns An OpenSSL error string (should never be NULL)
 **/
 const gchar* mongo_ssl_get_last_error (const mongo_ssl_ctx *ctx);
 
+/** Gets the result of the latest session verification process
+ *
+ * In the case of MONGO_SSL_V_ERR_PROTO, you may use mongo_ssl_get_last_error () to find out more about the
+ * underlying SSL protocol error.
+ * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
+ * @returns A mongo_ssl_verify_result enum that indicates the verification result
+**/
 mongo_ssl_verify_result mongo_ssl_get_last_verify_result (const mongo_ssl_ctx *ctx);
 
 /** Sets maximal depth of certificate chain verification
@@ -289,9 +296,29 @@ mongo_ssl_verify_result mongo_ssl_get_last_verify_result (const mongo_ssl_ctx *c
 **/
 void mongo_ssl_conf_set_verify_depth (mongo_ssl_ctx *ctx, guint depth);
 
+/** Gets the maximal depth of certificate chain verification
+ * 
+ * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
+ * @returns Verification depth
+**/
 guint mongo_ssl_conf_get_verify_depth (const mongo_ssl_ctx *ctx);
 
+/** Sets trust requirement 
+ *
+ * If trust requirement is set to FALSE, the client accepts any certificate - in other words, when the 
+ * server provides a certificate (no matter if valid or not) it gets accepted and the validation will be considered successfull.
+ * If trust requirement is set to TRUE, the client needs valid certificate (unless the server's fingerprint is trusted, see mongo_ssl_set_trusted_fingerprints ()) - in other words, either the certificate gets completely validated or it is trusted because its fingerprint is on the whitelist. By default, trust - by either full certificate validation or fingerprint whitelisting - is required (TRUE).
+ * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
+ * @param required The desired status of trust requirement (TRUE=trust is required, FALSE=any certificate trusted; see details above)
+**/
 void mongo_ssl_conf_set_trust (mongo_ssl_ctx *ctx, gboolean required);
+
+/** Gets the previously set trust requirement
+ *
+ * The default value is TRUE.
+ * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
+ * @returns Trust requirement setting (TRUE/FALSE)
+**/
 gboolean mongo_ssl_conf_get_trust (const mongo_ssl_ctx *ctx);
 
 /** Performs session verification

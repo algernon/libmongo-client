@@ -1,8 +1,2 @@
- * CRL: Download CRL via HTTP from the distribution point provided by the certificate
- * OCSP: Add OCSP support
- * SSL: Add session resumption support
- * Create a complex SSL test case
- * Sometimes (it does not seem deterministic right now) f_sync_pool fails for some reason (using MongoDB v2.6.0)
- * Check for memory leaks, etc.
- * Write documentation
- * Hide mongo_ssl_verify_session
+It may be a little cumbersome, but now I see that I should use a verifier callback instead of a direct call to
+mongo_ssl_verify_session (). Or just create a wrapper around mongo_ssl_verify_session () that serves as a verify callback function. This way, we could report errors more accurately.
