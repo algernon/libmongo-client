@@ -165,24 +165,24 @@ test_env_setup (void)
 
   if (getenv ("SSL_CERT_PATH") && strlen (getenv ("SSL_CERT_PATH")) > 0)
     {
-      if (! mongo_ssl_conf_init (config.ssl_settings))
+      if (! mongo_ssl_init (config.ssl_settings))
         {
-          perror ("mongo_ssl_conf_init");
+          perror ("mongo_ssl_init");
           return FALSE;
         }
 
-      if (! mongo_ssl_conf_set_cert (config.ssl_settings, g_strdup (getenv ("SSL_CERT_PATH"))))
+      if (! mongo_ssl_set_cert (config.ssl_settings, g_strdup (getenv ("SSL_CERT_PATH"))))
         {
-          perror ("mongo_ssl_conf_set_cert");
+          perror ("mongo_ssl_set_cert");
           return FALSE;
         }
 
 
       if (getenv ("SSL_CA_PATH") && strlen (getenv ("SSL_CA_PATH")) > 0)
         {
-          if (! mongo_ssl_conf_set_ca (config.ssl_settings, g_strdup (getenv ("SSL_CA_PATH"))))
+          if (! mongo_ssl_set_ca (config.ssl_settings, g_strdup (getenv ("SSL_CA_PATH"))))
             {
-              perror ("mongo_ssl_conf_set_ca");
+              perror ("mongo_ssl_set_ca");
               return FALSE;
             }
         }
@@ -190,19 +190,19 @@ test_env_setup (void)
 
       if (getenv ("SSL_CRL_PATH") && strlen (getenv ("SSL_CRL_PATH")) > 0)
         {
-          if (! mongo_ssl_conf_set_crl (config.ssl_settings, g_strdup (getenv ("SSL_CRL_PATH"))))
+          if (! mongo_ssl_set_crl (config.ssl_settings, g_strdup (getenv ("SSL_CRL_PATH"))))
             {
-              perror ("mongo_ssl_conf_set_crl");
+              perror ("mongo_ssl_set_crl");
               return FALSE;
             }
         }
 
       if (getenv ("SSL_KEY_PATH") && strlen (getenv ("SSL_KEY_PATH")) >0)
         {
-         if (! mongo_ssl_conf_set_key (config.ssl_settings, g_strdup (getenv ("SSL_KEY_PATH")), 
+         if (! mongo_ssl_set_key (config.ssl_settings, g_strdup (getenv ("SSL_KEY_PATH")), 
                 g_strdup (getenv ("SSL_KEY_PW"))))
            {
-             perror ("mongo_ssl_conf_set_key");
+             perror ("mongo_ssl_set_key");
              return FALSE;
            }
         }
@@ -222,7 +222,7 @@ test_env_free (void)
   g_free (config.coll);
   g_free (config.ns);
   g_free (config.gfs_prefix);
-  mongo_ssl_conf_clear (config.ssl_settings);
+  mongo_ssl_clear (config.ssl_settings);
   g_free (config.ssl_settings);
   mongo_ssl_util_cleanup_lib ();
 }

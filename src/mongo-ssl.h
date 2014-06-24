@@ -74,7 +74,7 @@ typedef struct {
 } mongo_ssl_session_cache_entry;
 
 /** An internal context structure that is a wrapper for the SSL_CTX object. It also stores configuration parameters and last SSL related error code from the OpenSSL library. Multiple threads may use the same mongo_ssl_ctx, but only one should manipulate it
-via setter functions at a time! (The internal SSL_CTX object is made thread-safe by the library, but the data fields in mongo_ssl_ctx are not so multiple writes from different threads may introduce inconsistency between these values in mongo_ssl_ctx and the actual state of the internal SSL_CTX object) However, you may use mongo_ssl_conf_lock () and mongo_ssl_conf_unlock () to engage mutual exclusion (not really efficient; I still recommend deep copying mongo_ssl_ctx objects, one copy for each thread). Even better, call any setter functions sequentially, from one thread, then use the context from multiple threads simultaneously without locking.  **/
+via setter functions at a time! (The internal SSL_CTX object is made thread-safe by the library, but the data fields in mongo_ssl_ctx are not so multiple writes from different threads may introduce inconsistency between these values in mongo_ssl_ctx and the actual state of the internal SSL_CTX object) However, you may use mongo_ssl_lock () and mongo_ssl_conf_unlock () to engage mutual exclusion (not really efficient; I still recommend deep copying mongo_ssl_ctx objects, one copy for each thread). Even better, call any setter functions sequentially, from one thread, then use the context from multiple threads simultaneously without locking.  **/
 typedef struct {
   gchar *ca_path;
   gchar *cert_path;
@@ -91,6 +91,7 @@ typedef struct {
   GList *session_cache;
   GList *trusted_fingerprints;
   GList *trusted_DNs;
+  gboolean /*server_*/cert_required;
   gboolean trust_required;
   GStaticMutex __guard;
 } mongo_ssl_ctx;
@@ -127,18 +128,18 @@ void mongo_ssl_util_cleanup_lib ();
  * @param ctx A valid pointer to a properly allocated mongo_ssl_ctx structure
  * @returns TRUE on success, FALSE on failure
 **/
-gboolean mongo_ssl_conf_init (mongo_ssl_ctx *ctx);
+gboolean mongo_ssl_init (mongo_ssl_ctx *ctx);
 
 /** Clears a Mongo SSL context object
  *
  * Resets a mongo_ssl_ctx object to its default state. Please note, that this function deallocates all internal
- * objects, so you should call mongo_ssl_conf_init () again if you want to re-use the object. It also implies, that
+ * objects, so you should call mongo_ssl_init () again if you want to re-use the object. It also implies, that
  * the structure itself does not get deallocated - that is the responsiblity of the user as well as allocation. Also, 
  * trusted fingerprints and DNs lists do not get deallocated, however their pointers get reset, so you need another pointer
  * refering to them so you can deallocate them properly if needed - this is the responsibility of the caller.
  * @param ctx A valid pointer to a properly allocated mongo_ssl_ctx structure
 **/
-void mongo_ssl_conf_clear (mongo_ssl_ctx *ctx);
+void mongo_ssl_clear (mongo_ssl_ctx *ctx);
 
 /** Sets trusted DNs list
  *
@@ -148,12 +149,12 @@ void mongo_ssl_conf_clear (mongo_ssl_ctx *ctx);
  * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
  * @param DNs A list of g_char* strings storing trusted distinguished names
 **/
-void mongo_ssl_conf_set_trusted_DNs (mongo_ssl_ctx *ctx, GList *DNs);
+void mongo_ssl_set_trusted_DNs (mongo_ssl_ctx *ctx, GList *DNs);
 
 /** Gets the trusted DNs list
  * @returns A pointer to the first element of the list (may be NULL)
 **/
-GList *mongo_ssl_conf_get_trusted_DNs ();
+GList *mongo_ssl_get_trusted_DNs ();
 
 /** Sets trusted fingerprints list
  * If set, the client only accepts certificates having one of those SHA-1 fingerprints on the list. Actually, it only 
@@ -162,12 +163,12 @@ GList *mongo_ssl_conf_get_trusted_DNs ();
  * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
  * @param fingerprints A list of g_char* strings storing trusted SHA-1 fingerprints; each one is required to be in the following format: SHA1:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX:XX 
 **/
-void mongo_ssl_conf_set_trusted_fingerprints (mongo_ssl_ctx *ctx, GList *fingerprints);
+void mongo_ssl_set_trusted_fingerprints (mongo_ssl_ctx *ctx, GList *fingerprints);
 
 /** Retrieves trusted fingerprints list
  * @returns A pointer to the first element of the list (may be NULL)
 **/
-GList *mongo_ssl_conf_get_trusted_fingerprints (const mongo_ssl_ctx *ctx);
+GList *mongo_ssl_get_trusted_fingerprints (const mongo_ssl_ctx *ctx);
 
 /** Sets CA (Certificate Authority) certificate file path
  * 
@@ -177,7 +178,7 @@ GList *mongo_ssl_conf_get_trusted_fingerprints (const mongo_ssl_ctx *ctx);
  * @param ca_path CA path (string)
  * @returns TRUE on success, FALSE on failure
 **/
-gboolean mongo_ssl_conf_set_ca (mongo_ssl_ctx *ctx, gchar *ca_path);
+gboolean mongo_ssl_set_ca (mongo_ssl_ctx *ctx, gchar *ca_path);
 
 /** Gets CA (Certificate Authority) certificate file path
  *
@@ -185,7 +186,7 @@ gboolean mongo_ssl_conf_set_ca (mongo_ssl_ctx *ctx, gchar *ca_path);
  * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
  * @returns CA path (string); NULL if not set
 **/
-gchar *mongo_ssl_conf_get_ca (const mongo_ssl_ctx *ctx);
+gchar *mongo_ssl_get_ca (const mongo_ssl_ctx *ctx);
 
 /** Sets client certificate file path
  * 
@@ -195,7 +196,7 @@ gchar *mongo_ssl_conf_get_ca (const mongo_ssl_ctx *ctx);
  * @param cert_path Certificate file path (string)
  * @returns TRUE on success, FALSE on failure
 **/
-gboolean mongo_ssl_conf_set_cert (mongo_ssl_ctx *ctx, gchar *cert_path);
+gboolean mongo_ssl_set_cert (mongo_ssl_ctx *ctx, gchar *cert_path);
 
 /** Sets client certificate file path
  * 
@@ -203,7 +204,7 @@ gboolean mongo_ssl_conf_set_cert (mongo_ssl_ctx *ctx, gchar *cert_path);
  * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
  * @returns Client cert. path (string); NULL if not set
 **/
-gchar *mongo_ssl_conf_get_cert (const mongo_ssl_ctx *ctx);
+gchar *mongo_ssl_get_cert (const mongo_ssl_ctx *ctx);
 
 /** Sets CRL (Certificate Revocation List) file path
  *
@@ -214,7 +215,7 @@ gchar *mongo_ssl_conf_get_cert (const mongo_ssl_ctx *ctx);
  * @param crl_path Path to CRL file or directory (string)
  * @returns TRUE on success, FALSE on failure
 **/
-gboolean mongo_ssl_conf_set_crl (mongo_ssl_ctx *ctx, gchar *crl_path);
+gboolean mongo_ssl_set_crl (mongo_ssl_ctx *ctx, gchar *crl_path);
 
 /** Gets CRL (Certificate Revocation List) file path
  * 
@@ -222,7 +223,7 @@ gboolean mongo_ssl_conf_set_crl (mongo_ssl_ctx *ctx, gchar *crl_path);
  * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
  * @returns CRL file path (string); NULL if not set
 **/
-gchar *mongo_ssl_conf_get_crl (const mongo_ssl_ctx *ctx);
+gchar *mongo_ssl_get_crl (const mongo_ssl_ctx *ctx);
 
 /** Sets client private key file
  *
@@ -233,7 +234,7 @@ gchar *mongo_ssl_conf_get_crl (const mongo_ssl_ctx *ctx);
  * @param key_pw If given, the private key file is assumed to be encrypted, and the password is used to decrypt it. If it is NULL, the key file is assumed to be - consequently, treated as - plain text
  * @returns TRUE on success, FALSE on failure
 **/
-gboolean mongo_ssl_conf_set_key (mongo_ssl_ctx *ctx, gchar *key_path, gchar *key_pw); 
+gboolean mongo_ssl_set_key (mongo_ssl_ctx *ctx, gchar *key_path, gchar *key_pw); 
 
 /** Gets client private key file path
  *
@@ -241,7 +242,7 @@ gboolean mongo_ssl_conf_set_key (mongo_ssl_ctx *ctx, gchar *key_path, gchar *key
  * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
  * @returns Private key file path (string); NULL if not set
 **/
-gchar *mongo_ssl_conf_get_key (const mongo_ssl_ctx *ctx);
+gchar *mongo_ssl_get_key (const mongo_ssl_ctx *ctx);
 
 /** Sets list of accepted ciphers
  *
@@ -250,7 +251,7 @@ gchar *mongo_ssl_conf_get_key (const mongo_ssl_ctx *ctx);
  * @param ciphers Cipher list specification
  * @returns TRUE on success, FALSE on failure
 **/
-gboolean mongo_ssl_conf_set_ciphers (mongo_ssl_ctx *ctx, mongo_ssl_ciphers chipers);
+gboolean mongo_ssl_set_ciphers (mongo_ssl_ctx *ctx, mongo_ssl_ciphers chipers);
 
 
 /** Gets list of accepted ciphers
@@ -259,7 +260,7 @@ gboolean mongo_ssl_conf_set_ciphers (mongo_ssl_ctx *ctx, mongo_ssl_ciphers chipe
  * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
  * @returns An enumeration representing the cipher set
 **/
-mongo_ssl_ciphers mongo_ssl_conf_get_ciphers (const mongo_ssl_ctx* ctx);
+mongo_ssl_ciphers mongo_ssl_get_ciphers (const mongo_ssl_ctx* ctx);
 
 /** Puts further connections corresponding to the given context in auto-retry mode
  *
@@ -294,24 +295,29 @@ mongo_ssl_verify_result mongo_ssl_get_last_verify_result (const mongo_ssl_ctx *c
  * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
  * @param depth Maximal verification depth
 **/
-void mongo_ssl_conf_set_verify_depth (mongo_ssl_ctx *ctx, guint depth);
+void mongo_ssl_set_verify_depth (mongo_ssl_ctx *ctx, guint depth);
 
 /** Gets the maximal depth of certificate chain verification
  * 
  * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
  * @returns Verification depth
 **/
-guint mongo_ssl_conf_get_verify_depth (const mongo_ssl_ctx *ctx);
+guint mongo_ssl_get_verify_depth (const mongo_ssl_ctx *ctx);
 
-/** Sets trust requirement 
+/** Sets security mode 
  *
- * If trust requirement is set to FALSE, the client accepts any certificate - in other words, when the 
- * server provides a certificate (no matter if valid or not) it gets accepted and the validation will be considered successfull.
- * If trust requirement is set to TRUE, the client needs valid certificate (unless the server's fingerprint is trusted, see mongo_ssl_set_trusted_fingerprints ()) - in other words, either the certificate gets completely validated or it is trusted because its fingerprint is on the whitelist. By default, trust - by either full certificate validation or fingerprint whitelisting - is required (TRUE).
+ * Possible security mode combinations (ordered by strength):
+ *  (<server certificate is...>-<presented certificate must be...>)
+ *  required-trusted (TRUE, TRUE):     the server must present a valid certificate to start communication
+ *  optional-trusted (FALSE, TRUE):    the server may present a certificate which gets validated (if that fails, the connection gets dropped)
+ *  required-untrusted (TRUE, FALSE):  the server must present a certificate which does not get validated
+ *  optional-untrusted (FALSE, FALSE): the server may present a certificate, but it is completely ignored anyway
+ * Note, that default security level is (TRUE, TRUE).
  * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
- * @param required The desired status of trust requirement (TRUE=trust is required, FALSE=any certificate trusted; see details above)
+ * @param required Semantics: TRUE = require a certificate from the server, FALSE = server certificate is optional
+ * @param trusted Semantics: TRUE = the server certificate (if presented) gets validated, FALSE = the server certificate does not get validated
 **/
-void mongo_ssl_conf_set_trust (mongo_ssl_ctx *ctx, gboolean required);
+void mongo_ssl_set_security (mongo_ssl_ctx *ctx, gboolean required, gboolean trusted);
 
 /** Gets the previously set trust requirement
  *
@@ -319,29 +325,27 @@ void mongo_ssl_conf_set_trust (mongo_ssl_ctx *ctx, gboolean required);
  * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
  * @returns Trust requirement setting (TRUE/FALSE)
 **/
-gboolean mongo_ssl_conf_get_trust (const mongo_ssl_ctx *ctx);
+gboolean mongo_ssl_is_trust_required (const mongo_ssl_ctx *ctx);
 
-/** Performs session verification
+/** Gets the previously set server certification requirement
  *
- * Checks the certificate provided by the server. The check includes the OpenSSL built-in process
- * (fingerprint, expiration, CRL, recursive...) and SNI (based on either CN and SubjectAltNames) for the
- * first certificate in the chain. This function is called from mongo_ssl_connect () right after the handshake.
- * Do not call this function directly.
+ * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
+ * @returns TRUE if the server must present a certificate according to the current setting, FALSE otherwise
 **/
-mongo_ssl_verify_result mongo_ssl_verify_session (SSL*, BIO*, mongo_ssl_ctx*); 
+gboolean mongo_ssl_is_cert_required (const mongo_ssl_ctx *ctx);
 
 /** Locks a mongo_ssl_ctx by calling g_static_mutex_lock ()
  *
  * The current thread blocks until it can acquire the lock.
  * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
 **/
-void mongo_ssl_conf_lock (mongo_ssl_ctx *ctx);
+void mongo_ssl_lock (mongo_ssl_ctx *ctx);
 
 /** Unlocks a mongo_ssl_ctx by calling g_static_mutex_unlock ()
  *
  *  @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
 **/
-void mongo_ssl_conf_unlock (mongo_ssl_ctx *ctx);
+void mongo_ssl_unlock (mongo_ssl_ctx *ctx);
 
 G_END_DECLS
 

@@ -189,6 +189,7 @@ _find_session (mongo_ssl_ctx *conf, const gchar *host, gint port)
     return ret;
 }
 
+// TODO: Remove commented (unused) code fragments
 mongo_connection * 
 mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf) 
 {
@@ -208,7 +209,7 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
   SSL *ssl = NULL;
   int fd, err;
   gboolean conn_ok = FALSE;
-  gboolean verify_ok = TRUE;
+  gboolean verify_ok = FALSE;
   mongo_ssl_session_cache_entry *se = NULL;
   gboolean reused_session = FALSE;
   gchar *t = NULL;
@@ -239,6 +240,8 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
       goto error;
     }
 
+  BIO_set_app_data (bio, (void*) host);
+
   // FIXME
   //se = _find_session (conf, host, port); // Session resumption does not seem to be working with MongoDB v2.6 (wtf?)
   
@@ -253,49 +256,60 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
             }
          }
     }
- 
 
-  if (BIO_do_connect (bio) != 1) 
+  
+  SSL_set_app_data (ssl, (void*) conf);
+
+  BIO_set_close (bio, BIO_CLOSE);
+
+  /*if (BIO_do_connect (bio) != 1) 
+    {
+      goto error;
+    }
+   */
+
+
+  if (SSL_connect (ssl) != 1)
     {
       goto error;
     }
 
   conn_ok = TRUE;
-  reused_session = SSL_session_reused (ssl);
+  //reused_session = SSL_session_reused (ssl);
   
-  if (!reused_session)
+  /*if (!reused_session)
     {
       if (BIO_do_handshake (bio) != 1) 
         {
+          fprintf (stderr, "mongo_ssl_connect () BIO_do_handshake () fails\n");
           goto error;
         }
-    }
-  
-  rstat = mongo_ssl_verify_session (ssl, bio, conf);
-  conf->last_verify_result = rstat;
+    }*/
 
-  if ( ! (MONGO_SSL_SESSION_OK(rstat))  ) 
-    {
-      verify_ok = FALSE;
-      goto error;
-    }
+  verify_ok = TRUE; // callback mode (SSL_connect may fail on either socket error or protocol error)
+  
+  //rstat = mongo_ssl_verify_session (ssl, bio, conf);
+  //conf->last_verify_result = rstat;
+
+  //if ( ! (MONGO_SSL_SESSION_OK(rstat))  ) 
+  //if (SSL_get_verify_result (ssl) != X509_V_OK)  
+  //  {
+  //    verify_ok = FALSE;
+  //    goto error;
+  //  }
   
   mongo_connection *conn = g_new0 (mongo_connection, 1);
     
   fd = SSL_get_fd (ssl); 
-    
-  BIO_set_close (bio, BIO_CLOSE);
-
+   
   conn->fd = fd;    
   conn->ssl = g_new0 (mongo_ssl_conn, 1); 
   conn->ssl->bio = bio;
   conn->ssl->conn = ssl;
   conn->ssl->verification_status = rstat;
   conn->ssl->super = conf;
-
-  mongo_connection_set_timeout (conn, 2500); // try to set a lower default timeout
-  
-  if (se != NULL)
+ 
+  /*if (se != NULL)
     {
       se->sess = SSL_get1_session (ssl);
     }
@@ -309,7 +323,7 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
           ent->sess = s;
           conf->session_cache = g_list_append (conf->session_cache, ent);
         }
-    }
+    }*/
 
   g_free (t);
 
@@ -317,7 +331,9 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
 
 error:
   g_free (t);
+  
   conf->last_ssl_error = ERR_peek_last_error ();
+    
   if (verify_ok)
     conf->last_verify_result = MONGO_SSL_V_ERR_PROTO;
   
@@ -331,7 +347,7 @@ error:
     {
       BIO_free_all (bio);
     }
-
+  
   return NULL;
 }
 
@@ -424,11 +440,6 @@ mongo_packet_send (mongo_connection *conn, const mongo_packet *p)
   if (conn->ssl != NULL)
     {
       int err = 0;
-      // UPDATE: SIG_IGN seems to be working now (maybe I fucked something up...)
-      //sigemptyset (&sigmask);
-      //sigaddset (&sigmask, SIGPIPE);
-
-      //pthread_sigmask (SIG_BLOCK, &sigmask, NULL);
 
       guint8 *buf = g_new0 (guint8, sizeof(h) + data_size);
       memcpy (buf, iov[0].iov_base, sizeof (h));
@@ -436,8 +447,6 @@ mongo_packet_send (mongo_connection *conn, const mongo_packet *p)
 
       if ( (err = BIO_write (conn->ssl->bio, buf, (gint32)sizeof (h) + data_size)) != ((gint32)sizeof (h) + data_size))
         {
-         //fprintf (stderr, "[mongo_packet_send] BIO write (written: %d, expected: %d) libc_error = %s, ssl_error = %s",
-         //           err, (gint32)sizeof (h) + data_size, strerror (errno), ERR_error_string (ERR_peek_last_error (), NULL) );
          g_free (buf);
          return FALSE;
         }
@@ -482,7 +491,6 @@ mongo_packet_recv (mongo_connection *conn)
     } 
   else
     {
-        //fprintf(stderr, "[mongo_packet_recv] SSL mode is On\n");
         int c = 0;
         do 
             {
@@ -494,7 +502,6 @@ mongo_packet_recv (mongo_connection *conn)
         if (c != sizeof (mongo_packet_header))
             {
                 conn->ssl->super->last_ssl_error = ERR_peek_last_error ();
-                //fprintf(stderr, "[mongo_packet_recv][reading packet header] Data read: %d bytes Expected: %d Returning NULL\n", c, sizeof (mongo_packet_header) );
                 return NULL;
             }
     }
@@ -541,9 +548,7 @@ mongo_packet_recv (mongo_connection *conn)
         
             if (c != size)
                 {
-                    conn->ssl->super->last_ssl_error = ERR_peek_last_error ();
-                     fprintf(stderr, "[mongo_packet_recv] Data read: %d bytes Expected: %d Returning NULL\n", c, sizeof (mongo_packet_header) );
- 
+                    conn->ssl->super->last_ssl_error = ERR_peek_last_error (); 
                     g_free (data);
                     mongo_wire_packet_free (p);
                     return NULL;

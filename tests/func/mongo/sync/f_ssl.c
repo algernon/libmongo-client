@@ -4,7 +4,7 @@
 #include "libmongo-private.h"
 
 #define THREAD_POOL_SIZE 5
-#define TEST_CASES 8 + THREAD_POOL_SIZE * 2 + THREAD_POOL_SIZE * 4
+#define TEST_CASES 9 + THREAD_POOL_SIZE * 2 + THREAD_POOL_SIZE * 4
 
 // TODO: Add more test cases
 
@@ -16,7 +16,7 @@ test_func_mongo_sync_ssl_connect (void)
   GList *trusted_fps = NULL; 
   trusted_fps = g_list_append (trusted_fps, "SHA1:00:DE:AD:BE:EF"); // invalid fingerprint
 
-  mongo_ssl_conf_set_trusted_fingerprints (config.ssl_settings, trusted_fps);
+  mongo_ssl_set_trusted_fingerprints (config.ssl_settings, trusted_fps);
 
   conn = mongo_sync_ssl_connect (config.primary_host, config.primary_port, TRUE, config.ssl_settings);
 
@@ -33,11 +33,11 @@ test_func_mongo_sync_ssl_connect (void)
   mongo_sync_disconnect (conn);
 
   // 2. Trusted DN Test (for 3party) 
-  mongo_ssl_conf_set_trusted_fingerprints (config.ssl_settings, NULL);
+  mongo_ssl_set_trusted_fingerprints (config.ssl_settings, NULL);
   GList *trusted_DNs = NULL;
   trusted_DNs = g_list_append (trusted_DNs, "*, O=Example Inc, ST=Some-State, C=*");
 
-  mongo_ssl_conf_set_trusted_DNs (config.ssl_settings, trusted_DNs);
+  mongo_ssl_set_trusted_DNs (config.ssl_settings, trusted_DNs);
   
   conn = mongo_sync_ssl_connect (config.primary_host, config.primary_port, TRUE, config.ssl_settings);
 
@@ -66,8 +66,8 @@ test_func_mongo_sync_ssl_insert_query (void)
   bson_append_string (test_doc, test_string, "ok", -1);
   bson_finish (test_doc);
   
-  //conn = mongo_sync_ssl_connect (config.primary_host, config.primary_port, TRUE, config.ssl_settings);
-  conn = mongo_sync_connect (config.primary_host, config.primary_port, TRUE);
+  conn = mongo_sync_ssl_connect (config.primary_host, config.primary_port, TRUE, config.ssl_settings);
+  //conn = mongo_sync_connect (config.primary_host, config.primary_port, TRUE);
   mongo_sync_conn_set_auto_reconnect (conn, TRUE);
   
   ok (conn != NULL, "connection works without whitelists");
@@ -174,12 +174,12 @@ ssl_ping_success_thread (gpointer _c)
 {
   mongo_ssl_ctx *c = (mongo_ssl_ctx*) _c;
   sleep ( rand () % 5 );
-  mongo_ssl_conf_lock (c);
-  mongo_ssl_conf_set_crl (c, NULL);
+  mongo_ssl_lock (c);
+  mongo_ssl_set_crl (c, NULL);
   mongo_sync_connection *conn = mongo_sync_ssl_connect (config.primary_host, config.primary_port, TRUE, c);
   ok (conn != NULL, "connection should succeed on a thread that does not initiate CRL check");
   ok (mongo_sync_cmd_ping (conn), "ping should succeed on a thread that does not initiate CRL check");
-  mongo_ssl_conf_unlock (c);
+  mongo_ssl_unlock (c);
   mongo_sync_disconnect (conn);
 
   return NULL;
@@ -191,12 +191,12 @@ ssl_ping_fail_thread (gpointer _c)
 {
   mongo_ssl_ctx *c = (mongo_ssl_ctx*) _c;
   sleep ( rand () % 3 );
-  mongo_ssl_conf_lock (c);
-  mongo_ssl_conf_set_crl (c, "./ssl/3party/ca_crl.pem");
+  mongo_ssl_lock (c);
+  mongo_ssl_set_crl (c, "./ssl/3party/ca_crl.pem");
   mongo_sync_connection *conn = mongo_sync_ssl_connect (config.primary_host, config.primary_port, TRUE, c);
   ok ((conn == NULL) && (mongo_ssl_get_last_verify_result (c) == MONGO_SSL_V_ERR_PROTO), "connection should fail on a thread that initiates CRL check");
   // we could ping here, but why? :)
-  mongo_ssl_conf_unlock (c);
+  mongo_ssl_unlock (c);
 
   return NULL;
 }
@@ -237,13 +237,24 @@ test_func_mongo_ssl_multithread (void)
 }
 
 void 
+test_func_mongo_ssl_untrusted (void)
+{
+  mongo_ssl_set_crl (config.ssl_settings, "./ssl/3party/ca_crl.pem");
+  mongo_ssl_set_security (config.ssl_settings, TRUE, FALSE);
+  mongo_sync_connection *conn = mongo_sync_ssl_connect (config.primary_host, config.primary_port, TRUE, config.ssl_settings);
+  ok (conn != NULL, "Connection works in untrusted mode");
+  mongo_sync_disconnect (conn);
+}
+
+void 
 test_func_ssl (void)
 {
   begin_ssl_tests (TEST_CASES);
-  mongo_ssl_conf_set_crl (config.ssl_settings, NULL);
+  mongo_ssl_set_crl (config.ssl_settings, NULL);
   test_func_mongo_sync_ssl_connect ();
   test_func_mongo_sync_ssl_insert_query ();
   test_func_mongo_ssl_multithread ();
+  test_func_mongo_ssl_untrusted ();
   end_ssl_tests ();
 }
 
