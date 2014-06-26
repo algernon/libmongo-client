@@ -1,4 +1,4 @@
-/* mongo-ssl.h - libmongo client's SSL support
+/* mongo-ssl.h - libmongo-client's SSL support
 * Copyright 2014 Gyorgy Demarcsek <dgy.jr92@gmail.com>
 */
 
@@ -74,7 +74,7 @@ typedef struct {
 } mongo_ssl_session_cache_entry;
 
 /** An internal context structure that is a wrapper for the SSL_CTX object. It also stores configuration parameters and last SSL related error code from the OpenSSL library. Multiple threads may use the same mongo_ssl_ctx, but only one should manipulate it
-via setter functions at a time! (The internal SSL_CTX object is made thread-safe by the library, but the data fields in mongo_ssl_ctx are not so multiple writes from different threads may introduce inconsistency between these values in mongo_ssl_ctx and the actual state of the internal SSL_CTX object) However, you may use mongo_ssl_lock () and mongo_ssl_conf_unlock () to engage mutual exclusion (not really efficient; I still recommend deep copying mongo_ssl_ctx objects, one copy for each thread). Even better, call any setter functions sequentially, from one thread, then use the context from multiple threads simultaneously without locking.  **/
+via setter functions at a time! (The internal SSL_CTX object is made thread-safe by the library, but the data fields in mongo_ssl_ctx are not so multiple writes from different threads may introduce inconsistency between these values in mongo_ssl_ctx and the actual state of the internal SSL_CTX object) However, you may use mongo_ssl_lock () and mongo_ssl_conf_unlock () to initiate mutual exclusion (not really efficient; I still recommend deep copying mongo_ssl_ctx objects, one copy for each thread). Even better, call any setter functions sequentially, from one thread, then use the context (with no manipulation) from multiple threads simultaneously without locking.  **/
 typedef struct {
   gchar *ca_path;
   gchar *cert_path;
@@ -82,12 +82,13 @@ typedef struct {
   gchar *key_path;
   gchar *cipher_list;  
   gchar *key_pw;
-  int verify_depth;
+  gint verify_depth;
 
   SSL_CTX *ctx;
   X509_VERIFY_PARAM *params;
-  long last_ssl_error;
+  glong last_ssl_error;
   mongo_ssl_verify_result last_verify_result;
+  glong last_verify_err_code;
   GList *session_cache;
   GList *trusted_fingerprints;
   GList *trusted_DNs;
@@ -289,6 +290,14 @@ const gchar* mongo_ssl_get_last_error (const mongo_ssl_ctx *ctx);
  * @returns A mongo_ssl_verify_result enum that indicates the verification result
 **/
 mongo_ssl_verify_result mongo_ssl_get_last_verify_result (const mongo_ssl_ctx *ctx);
+
+/** Returns the description of the latest certificate verification error
+ *
+ * If no verification has been performed yet, X509_V_OK (=the operation was successful) is set by default
+ * @param ctx A valid pointer to a properly allocated and initialized mongo_ssl_ctx structure
+ * @returns OpenSSL X509_V_* error string
+**/
+const gchar *mongo_ssl_get_last_verify_error (const mongo_ssl_ctx *ctx);
 
 /** Sets maximal depth of certificate chain verification
  *

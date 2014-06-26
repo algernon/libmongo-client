@@ -1,2 +1,1 @@
-It may be a little cumbersome, but now I see that I should use a verifier callback instead of a direct call to
-mongo_ssl_verify_session (). Or just create a wrapper around mongo_ssl_verify_session () that serves as a verify callback function. This way, we could report errors more accurately.
+Integrate into syslog-ng and test, test, test...

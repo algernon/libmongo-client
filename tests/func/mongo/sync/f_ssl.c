@@ -4,9 +4,7 @@
 #include "libmongo-private.h"
 
 #define THREAD_POOL_SIZE 5
-#define TEST_CASES 9 + THREAD_POOL_SIZE * 2 + THREAD_POOL_SIZE * 4
-
-// TODO: Add more test cases
+#define TEST_CASES (11 + THREAD_POOL_SIZE * 6)
 
 void
 test_func_mongo_sync_ssl_connect (void)
@@ -239,11 +237,24 @@ test_func_mongo_ssl_multithread (void)
 void 
 test_func_mongo_ssl_untrusted (void)
 {
+  mongo_sync_connection *conn;
+  mongo_ssl_ctx *alternative = g_new0 (mongo_ssl_ctx, 1);
+  mongo_ssl_init (alternative);
+  mongo_ssl_set_cert (alternative, "./ssl/3party/client.pem");
+  mongo_ssl_set_ca (alternative, "./ssl/certs/mongodb.pem");
+  mongo_ssl_set_key (alternative, "./ssl/3party/client.pem", "test_client");
+  conn = mongo_sync_ssl_connect (config.primary_host, config.primary_port, TRUE, alternative);
+  ok (conn == NULL, "By default, invalid certificates are not accepted");
+  mongo_ssl_set_security (alternative, FALSE, TRUE);
+  conn = mongo_sync_ssl_connect (config.primary_host, config.primary_port, TRUE, alternative);
+  ok (conn == NULL, "When certificate is not required, still gets validated if provided");
   mongo_ssl_set_crl (config.ssl_settings, "./ssl/3party/ca_crl.pem");
   mongo_ssl_set_security (config.ssl_settings, TRUE, FALSE);
-  mongo_sync_connection *conn = mongo_sync_ssl_connect (config.primary_host, config.primary_port, TRUE, config.ssl_settings);
+  conn = mongo_sync_ssl_connect (config.primary_host, config.primary_port, TRUE, config.ssl_settings);
   ok (conn != NULL, "Connection works in untrusted mode");
   mongo_sync_disconnect (conn);
+  mongo_ssl_clear (alternative);
+  g_free (alternative);
 }
 
 void 

@@ -1,3 +1,10 @@
+/* mongo-ssl.c - Libmongo-client's SSL support
+ * Copyright 2014 György Demarcsek <dgy.jr92@gmail.com>
+*/
+
+/** @file src/mongo-ssl.c
+ * SSL support main source file
+ **/
 #include "mongo-ssl.h"
 
 #include <glib.h>
@@ -19,11 +26,7 @@
 static GStaticMutex *mongo_ssl_locks; // Internal mutexes for OpenSSL functions
 static gint mongo_ssl_lock_count;
 
-// FIXME: Some portions come from the syslog-ng source code (to merge or not to merge, that is the question...)
-
-// Predeclaration of verifier callback
 static int mongo_ssl_verify_callback (int, X509_STORE_CTX *);
-
 
 static unsigned long
 ssl_thread_id () 
@@ -154,6 +157,7 @@ mongo_ssl_init (mongo_ssl_ctx* c)
   c->trust_required = TRUE;
   c->cert_required = TRUE;
   c->last_verify_result = MONGO_SSL_V_UNDEF;
+  c->last_verify_err_code = X509_V_OK;
 
   if (c->ctx == NULL) 
     {
@@ -184,19 +188,8 @@ mongo_ssl_init (mongo_ssl_ctx* c)
           return FALSE;
         }
 
-      //SSL_CTX_set_verify (c->ctx, SSL_VERIFY_PEER, NULL);
-      SSL_CTX_set_verify (c->ctx, SSL_VERIFY_PEER, mongo_ssl_verify_callback);    
-          /*
-           * We could use our own verification callback here but it is just more simple to
-           * use a dedicated function for server authentication aka. session verification (mongo_ssl_verify_session).
-           * This technique has some disadvantages too:
-           *  --> Handshake may complete before hostname checks
-           *  --> X509_V_ERR_CERT_CHAIN_TOO_LONG cannot be detected properly
-          **/
-      
-      
+      SSL_CTX_set_verify (c->ctx, SSL_VERIFY_PEER, mongo_ssl_verify_callback);          
       mongo_ssl_set_verify_depth (c, MONGO_SSL_CERT_CHAIN_VERIFY_DEPTH);
-      
       mongo_ssl_set_auto_retry (c, TRUE);
     }
 
@@ -624,9 +617,6 @@ check_cn (const X509 *cert, const gchar *target_hostname)
       curr_key = g_strstrip (field_parts[0]);
       curr_value = g_strstrip (field_parts[1]);
       
-      //while ((*curr_key) == 0x20) curr_key++;
-      //while ((*curr_value) == 0x20) curr_value++;
-
       if (curr_key == NULL || curr_value == NULL) continue;
 
       gchar *curr_key_utf8 = g_utf8_casefold (curr_key, -1);
@@ -700,19 +690,20 @@ check_altnames (const X509 *cert, const gchar *target_hostname)
 }
 
 static gboolean
-_get_X509_digest(const X509 *x, GString *hash_string)
+_get_X509_digest (const X509 *x, GString *hash_string)
 {
   gint j;
   unsigned int n;
   unsigned char md[EVP_MAX_MD_SIZE];
-  g_assert(hash_string);
 
-  if (!X509_digest(x, EVP_sha1(), md, &n))
+  g_assert (hash_string != NULL);
+
+  if (!X509_digest (x, EVP_sha1(), md, &n))
     return FALSE;
 
-  g_string_append(hash_string, "SHA1:");
+  g_string_append (hash_string, "SHA1:");
   for (j = 0; j < (int) n; j++)
-    g_string_append_printf(hash_string, "%02X%c", md[j], (j + 1 == (int) n) ?'\0' : ':');
+    g_string_append_printf (hash_string, "%02X%c", md[j], (j + 1 == (int) n) ? '\0' : ':');
 
   return TRUE;
 }
@@ -787,7 +778,6 @@ check_dn (const X509 *cert, const mongo_ssl_ctx *c)
 }
 
 // TODO: Find a way to report details of X509 validation errors
-
 static
 mongo_ssl_verify_result
 mongo_ssl_verify_session (int prevok, 
@@ -818,7 +808,6 @@ mongo_ssl_verify_session (int prevok,
 
         return MONGO_SSL_V_OK_ALL;
     }
-
 
   //cert = SSL_get_peer_certificate (c);
   target_hostname = BIO_get_conn_hostname (b);
@@ -909,6 +898,8 @@ mongo_ssl_verify_callback (int preverify_ok, X509_STORE_CTX *ctx)
       return 0;
     }
 
+  _ctx->last_verify_err_code = err;
+
   bio = SSL_get_rbio (ssl);
   if (bio == NULL) 
     bio = SSL_get_wbio (ssl);
@@ -943,6 +934,14 @@ mongo_ssl_get_last_verify_result (const mongo_ssl_ctx *c)
   g_assert (c != NULL);
 
   return c->last_verify_result;
+}
+
+const gchar *
+mongo_ssl_get_last_verify_error (const mongo_ssl_ctx *c)
+{
+  g_assert (c != NULL);
+
+  return (const gchar *) X509_verify_cert_error_string (c->last_verify_err_code);
 }
 
 void
