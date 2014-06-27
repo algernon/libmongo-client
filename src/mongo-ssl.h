@@ -179,7 +179,7 @@ GList *mongo_ssl_get_trusted_fingerprints (const mongo_ssl_ctx *ctx);
  * @param ca_path CA path (string)
  * @returns TRUE on success, FALSE on failure
 **/
-gboolean mongo_ssl_set_ca (mongo_ssl_ctx *ctx, gchar *ca_path);
+gboolean mongo_ssl_set_ca (mongo_ssl_ctx *ctx, const gchar *ca_path);
 
 /** Gets CA (Certificate Authority) certificate file path
  *
@@ -197,7 +197,7 @@ gchar *mongo_ssl_get_ca (const mongo_ssl_ctx *ctx);
  * @param cert_path Certificate file path (string)
  * @returns TRUE on success, FALSE on failure
 **/
-gboolean mongo_ssl_set_cert (mongo_ssl_ctx *ctx, gchar *cert_path);
+gboolean mongo_ssl_set_cert (mongo_ssl_ctx *ctx, const gchar *cert_path);
 
 /** Sets client certificate file path
  * 
@@ -216,7 +216,7 @@ gchar *mongo_ssl_get_cert (const mongo_ssl_ctx *ctx);
  * @param crl_path Path to CRL file or directory (string)
  * @returns TRUE on success, FALSE on failure
 **/
-gboolean mongo_ssl_set_crl (mongo_ssl_ctx *ctx, gchar *crl_path);
+gboolean mongo_ssl_set_crl (mongo_ssl_ctx *ctx, const gchar *crl_path);
 
 /** Gets CRL (Certificate Revocation List) file path
  * 
@@ -235,7 +235,7 @@ gchar *mongo_ssl_get_crl (const mongo_ssl_ctx *ctx);
  * @param key_pw If given, the private key file is assumed to be encrypted, and the password is used to decrypt it. If it is NULL, the key file is assumed to be - consequently, treated as - plain text
  * @returns TRUE on success, FALSE on failure
 **/
-gboolean mongo_ssl_set_key (mongo_ssl_ctx *ctx, gchar *key_path, gchar *key_pw); 
+gboolean mongo_ssl_set_key (mongo_ssl_ctx *ctx, const gchar *key_path, const gchar *key_pw); 
 
 /** Gets client private key file path
  *

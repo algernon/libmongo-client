@@ -269,7 +269,7 @@ mongo_ssl_clear (mongo_ssl_ctx *c)
 }
 
 static gboolean 
-_file_exists (gchar *path)
+_file_exists (const gchar *path)
 {
   struct stat s;
   if (path == NULL) return FALSE;
@@ -283,7 +283,7 @@ _file_exists (gchar *path)
 }
 
 gboolean
-mongo_ssl_set_ca (mongo_ssl_ctx *c, gchar *ca_path) 
+mongo_ssl_set_ca (mongo_ssl_ctx *c, const gchar *ca_path) 
 {
   g_assert (c != NULL);
   g_assert (c->ctx != NULL);
@@ -316,7 +316,7 @@ mongo_ssl_get_ca (const mongo_ssl_ctx *c)
 }
 
 gboolean
-mongo_ssl_set_cert (mongo_ssl_ctx *c, gchar *cert_path) 
+mongo_ssl_set_cert (mongo_ssl_ctx *c, const gchar *cert_path) 
 {
   g_assert (c != NULL);
   g_assert (c->ctx != NULL);
@@ -350,7 +350,7 @@ mongo_ssl_get_cert (const mongo_ssl_ctx *c)
 }
 
 gboolean
-mongo_ssl_set_crl (mongo_ssl_ctx *c, gchar *crl_path) 
+mongo_ssl_set_crl (mongo_ssl_ctx *c, const gchar *crl_path) 
 {
   g_assert (c != NULL);
   g_assert (c->ctx != NULL);
@@ -393,7 +393,7 @@ mongo_ssl_get_crl (const mongo_ssl_ctx *c)
 }
 
 gboolean
-mongo_ssl_set_key (mongo_ssl_ctx *c, gchar *key_path, char *key_pw) 
+mongo_ssl_set_key (mongo_ssl_ctx *c, const gchar *key_path, const gchar *key_pw) 
 {
   g_assert (c != NULL);
   g_assert (c->ctx != NULL);
@@ -423,7 +423,7 @@ mongo_ssl_set_key (mongo_ssl_ctx *c, gchar *key_path, char *key_pw)
           ok = FALSE;
         }
         
-      private_key = PEM_read_PrivateKey (pKeyFile, NULL, NULL, key_pw);
+      private_key = PEM_read_PrivateKey (pKeyFile, NULL, NULL, (void*) key_pw);
       
       if (private_key == NULL)
         {
