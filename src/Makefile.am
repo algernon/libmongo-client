@@ -25,7 +25,7 @@ libmongo_client_la_SOURCES	= \
 
 libmongo_client_includedir	= $(includedir)/mongo-client
 libmongo_client_include_HEADERS	= \
-	bson.h mongo-wire.h mongo-client.h mongo-utils.h \
+	bson.h mongo-wire.h mongo-client.h mongo-ssl.h mongo-utils.h \
 	mongo-sync.h mongo-sync-cursor.h mongo-sync-pool.h \
 	sync-gridfs.h sync-gridfs-chunk.h sync-gridfs-stream.h \
 	mongo.h
