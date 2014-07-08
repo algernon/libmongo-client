@@ -356,6 +356,13 @@ void mongo_ssl_lock (mongo_ssl_ctx *ctx);
 **/
 void mongo_ssl_unlock (mongo_ssl_ctx *ctx);
 
+/** Gets the underlying SSL_CTX object wrapped by mongo_ssl_ctx so one can acess 
+ * and manipulate it by using various OpenSSL functions.
+ *
+ * @returns The underlying SSL_CTX object
+**/
+SSL_CTX *mongo_ssl_get_context(const mongo_ssl_ctx *ctx);
+
 G_END_DECLS
 
 #endif

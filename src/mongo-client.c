@@ -151,33 +151,17 @@ _find_session (mongo_ssl_ctx *conf, const gchar *host, gint port)
   gchar* t;
   mongo_ssl_session_cache_entry *ret = NULL;
 
-  if (conf == NULL)
-    {
-      errno = EINVAL;
-      return NULL;
-    }
-
-  if (conf->session_cache == NULL)
-    {
-      return NULL;
-    }
-
-  if (host == NULL)
-    {
-      return NULL;
-    }
-
-  if (strlen (host) == 0)
-    {
-      return NULL;
-    }
+  if (!conf || !conf->session_cache || !host || !*host) 
+    return NULL;
 
   t = g_strdup_printf ("%s:%d", host, port);
 
   for (l = conf->session_cache; l != NULL; l = l->next)
     {
       mongo_ssl_session_cache_entry *ent = (mongo_ssl_session_cache_entry *) l->data;
-      if (ent == NULL) continue;
+      if (ent == NULL) 
+        continue;
+      
       if (strcmp (ent->target, t) == 0) 
         {
           ret = ent;
@@ -189,10 +173,19 @@ _find_session (mongo_ssl_ctx *conf, const gchar *host, gint port)
     return ret;
 }
 
-// TODO: Remove commented (unused) code fragments
 mongo_connection * 
 mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf) 
 {
+  BIO *bio = NULL; 
+  SSL *ssl = NULL;
+  int fd, err;
+  gboolean conn_ok = FALSE;
+  gboolean verify_ok = FALSE;
+  mongo_ssl_session_cache_entry *se = NULL;
+  gboolean reused_session = FALSE;
+  gchar *t = NULL;
+  mongo_ssl_verify_result rstat = MONGO_SSL_V_UNDEF;
+
   if (conf == NULL)
     {
       errno = EINVAL;
@@ -204,17 +197,7 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
       errno = EINVAL;
       return NULL;
     }
-
-  BIO *bio = NULL; 
-  SSL *ssl = NULL;
-  int fd, err;
-  gboolean conn_ok = FALSE;
-  gboolean verify_ok = FALSE;
-  mongo_ssl_session_cache_entry *se = NULL;
-  gboolean reused_session = FALSE;
-  gchar *t = NULL;
-  mongo_ssl_verify_result rstat = MONGO_SSL_V_UNDEF;
-
+  
   if ((bio = BIO_new_ssl_connect (conf->ctx)) == NULL) 
     {
       goto error;
@@ -226,9 +209,7 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
     {
       goto error;
     }
- 
-  //SSL_set_mode (ssl, SSL_MODE_AUTO_RETRY); // Controlled on a per-CTX basis (see mongo_ssl_set_auto_retry)
-    
+  
   t = g_strdup_printf ("%s:%d", host, port);
   if (!BIO_set_conn_hostname (bio, t)) 
     {
@@ -241,33 +222,8 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
     }
 
   BIO_set_app_data (bio, (void*) host);
-
-  // FIXME
-  //se = _find_session (conf, host, port); // Session resumption does not seem to be working with MongoDB v2.6 (wtf?)
-  
-  if (se != NULL)
-    {
-      if (se->sess != NULL) 
-        {
-          if (SSL_set_session (ssl, se->sess) != 1)
-            {
-              conf->last_ssl_error = ERR_peek_last_error ();
-              SSL_set_session (ssl, NULL);
-            }
-         }
-    }
-
-  
   SSL_set_app_data (ssl, (void*) conf);
-
   BIO_set_close (bio, BIO_CLOSE);
-
-  /*if (BIO_do_connect (bio) != 1) 
-    {
-      goto error;
-    }
-   */
-
 
   if (SSL_connect (ssl) != 1)
     {
@@ -275,28 +231,8 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
     }
 
   conn_ok = TRUE;
-  //reused_session = SSL_session_reused (ssl);
   
-  /*if (!reused_session)
-    {
-      if (BIO_do_handshake (bio) != 1) 
-        {
-          fprintf (stderr, "mongo_ssl_connect () BIO_do_handshake () fails\n");
-          goto error;
-        }
-    }*/
-
-  verify_ok = TRUE; // callback mode (SSL_connect may fail on either socket error or protocol error)
-  
-  //rstat = mongo_ssl_verify_session (ssl, bio, conf);
-  //conf->last_verify_result = rstat;
-
-  //if ( ! (MONGO_SSL_SESSION_OK(rstat))  ) 
-  //if (SSL_get_verify_result (ssl) != X509_V_OK)  
-  //  {
-  //    verify_ok = FALSE;
-  //    goto error;
-  //  }
+  verify_ok = TRUE; /* callback mode (SSL_connect may fail on either socket error or protocol error) */
   
   mongo_connection *conn = g_new0 (mongo_connection, 1);
     
@@ -309,22 +245,6 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
   conn->ssl->verification_status = rstat;
   conn->ssl->super = conf;
  
-  /*if (se != NULL)
-    {
-      se->sess = SSL_get1_session (ssl);
-    }
-  else
-    {
-      SSL_SESSION *s = SSL_get1_session (ssl);
-      if (s != NULL)
-        {
-          mongo_ssl_session_cache_entry *ent = g_new0 (mongo_ssl_session_cache_entry, 1);
-          ent->target = g_strdup_printf("%s:%d", host, port);
-          ent->sess = s;
-          conf->session_cache = g_list_append (conf->session_cache, ent);
-        }
-    }*/
-
   g_free (t);
 
   return conn;
@@ -359,12 +279,6 @@ mongo_connect (const char *address, int port)
 
   return mongo_tcp_connect (address, port);
 }
-
-//mongo_connection *
-//mongo_connect (const char *address, int port, mongo_ssl_ctx *conf)
-//{
-//  return mongo_ssl_connect (address, port, conf); 
-//}
 
 #if VERSIONED_SYMBOLS
 __asm__(".symver mongo_tcp_connect,mongo_connect@LMC_0.1.0");
@@ -401,8 +315,6 @@ mongo_packet_send (mongo_connection *conn, const mongo_packet *p)
   struct iovec iov[2];
   struct msghdr msg;
   
-  //sigset_t sigmask;
-
   if (!conn)
     {
       errno = ENOTCONN;
@@ -439,20 +351,15 @@ mongo_packet_send (mongo_connection *conn, const mongo_packet *p)
 
   if (conn->ssl != NULL)
     {
-      int err = 0;
+      gint err = 0;
 
-      guint8 *buf = g_new0 (guint8, sizeof(h) + data_size);
-      memcpy (buf, iov[0].iov_base, sizeof (h));
-      memcpy (buf + sizeof (h), iov[1].iov_base, data_size);
-
-      if ( (err = BIO_write (conn->ssl->bio, buf, (gint32)sizeof (h) + data_size)) != ((gint32)sizeof (h) + data_size))
-        {
-         g_free (buf);
+      if ( (err = BIO_write (conn->ssl->bio, iov[0].iov_base, (gint32) sizeof (h))) != (gint32) sizeof (h))
          return FALSE;
-        }
-      g_free (buf);
+        
+      if ( (err = BIO_write (conn->ssl->bio, iov[1].iov_base, data_size)) != data_size)
+        return FALSE;
     }
-  else if (sendmsg (conn->fd, &msg, MSG_NOSIGNAL) != (gint32)sizeof (h) + data_size)
+  else if (sendmsg (conn->fd, &msg, MSG_NOSIGNAL) != (gint32) sizeof (h) + data_size)
      return FALSE;
 
   conn->request_id = h.id;

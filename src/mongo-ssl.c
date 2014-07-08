@@ -14,10 +14,6 @@
 
 #include <sys/stat.h>
 
-#ifdef _WIN32
-#include <windows.h>
-#endif
-
 #define HIGH_CIPHERS "HIGH:!EXPORT:!aNULL@STRENGTH"
 #define AES_CIPHERS "AES256-GCM-SHA384:AES256-SHA256:AES128-GCM-SHA384:AES128-SHA-256:AES256-SHA:AES128-SHA"
 #define TRIPLEDES_CIPHERS "DES-CBC3-SHA"
@@ -31,11 +27,7 @@ static int mongo_ssl_verify_callback (int, X509_STORE_CTX *);
 static unsigned long
 ssl_thread_id () 
 {
-  #ifdef _WIN32
-  return (unsigned long) GetCurrentThreadId ();
-  #else
   return (unsigned long) pthread_self ();
-  #endif
 }
 
 static void 
@@ -196,6 +188,13 @@ mongo_ssl_init (mongo_ssl_ctx* c)
   return TRUE;
 }
 
+SSL_CTX*
+mongo_ssl_get_context(const mongo_ssl_ctx *c)
+{
+  g_assert(c != NULL);
+  return c->ctx;
+}
+
 void 
 mongo_ssl_set_verify_depth (mongo_ssl_ctx *c, guint depth)
 {
@@ -276,7 +275,7 @@ _file_exists (const gchar *path)
 
   if (stat ((const char*) path, &s) != 0)
     {
-      return FALSE; // errno is set
+      return FALSE; /* errno is set */
     }
 
   return TRUE;
@@ -530,7 +529,7 @@ mongo_ssl_get_ciphers (const mongo_ssl_ctx *c)
   else if (strcmp (c->cipher_list, HIGH_CIPHERS) == 0)
     return MONGO_SSL_CIPHERS_DEFAULT;
   else
-   assert (FALSE); // the structure has been manipulated by hand
+   g_assert (FALSE); /* the structure has been manipulated by hand */
 }
 
 void 
@@ -777,7 +776,7 @@ check_dn (const X509 *cert, const mongo_ssl_ctx *c)
   return match;
 }
 
-// TODO: Find a way to report details of X509 validation errors
+/* TODO: Find a way to report details of X509 validation errors */
 static
 mongo_ssl_verify_result
 mongo_ssl_verify_session (int prevok, 
@@ -791,13 +790,13 @@ mongo_ssl_verify_session (int prevok,
   g_assert (b != NULL);
   g_assert (ctx != NULL);
 
-  //X509 *cert;
+  /*X509 *cert;*/
   char *target_hostname;
     
   gboolean sni_match = FALSE;
   int err;
   
-  // For non-leaf certs, just depend on prevok
+  /* For non-leaf certs, just depend on prevok */
   if (depth != 0)
     {
       if (prevok != 1)
@@ -809,7 +808,7 @@ mongo_ssl_verify_session (int prevok,
         return MONGO_SSL_V_OK_ALL;
     }
 
-  //cert = SSL_get_peer_certificate (c);
+  /* cert = SSL_get_peer_certificate (c); */
   target_hostname = BIO_get_conn_hostname (b);
   
   if (ctx->cert_required && (cert == NULL))
@@ -822,9 +821,10 @@ mongo_ssl_verify_session (int prevok,
       return MONGO_SSL_V_OK_NO_VERIFY;
     }
 
-  // Fingerprint whitelisting
-  // IMPORTANT: When the received fingerprint is not present on the list: drop the connection, however, when it is,
-  // accept the certificate without validation
+  /** Fingerprint whitelisting
+    * IMPORTANT: When the received fingerprint is not present on the list: drop the connection, however, when it is,
+    * accept the certificate without validation
+  **/
   if (ctx->trusted_fingerprints)
     {
       if (!check_fingerprint (cert, ctx)) 
@@ -833,23 +833,15 @@ mongo_ssl_verify_session (int prevok,
         return MONGO_SSL_V_OK_TRUSTED_FP;
     }
 
-  // DN whitelisting
-  // IMPORTANT: When received DN is not present on the list: drop the connection, however, when it is, 
-  // continue certificate validation
+  /** DN whitelisting
+    * IMPORTANT: When received DN is not present on the list: drop the connection, however, when it is, 
+    * continue certificate validation
+  **/
   if (ctx->trusted_DNs)
     {
       if (!check_dn (cert, ctx))
         return MONGO_SSL_V_ERR_UNTRUSTED_DN;
     }
-
-  // Built-in check (signature, expiration, CRL, etc.)
-  /*
-  if ((err = SSL_get_verify_result (c)) != X509_V_OK)
-    {
-      if (err != X509_V_ERR_INVALID_PURPOSE) // ignore invalid purpose errors (that's bullshit...:))
-        return MONGO_SSL_V_ERR_PROTO;
-    }
-  */
   
   if ((prevok != 1) && (preverr != X509_V_ERR_INVALID_PURPOSE))
     {
@@ -858,7 +850,7 @@ mongo_ssl_verify_session (int prevok,
     }
   
 
-  // Hostname check
+  /* Hostname check */
   if (target_hostname != NULL)
     {
       sni_match = (check_cn (cert, target_hostname)) || (check_altnames (cert, target_hostname));
@@ -894,27 +886,22 @@ mongo_ssl_verify_callback (int preverify_ok, X509_STORE_CTX *ctx)
   depth = X509_STORE_CTX_get_error_depth (ctx);
 
   if (_ctx == NULL)
-    {
       return 0;
-    }
 
   _ctx->last_verify_err_code = err;
 
   bio = SSL_get_rbio (ssl);
+
   if (bio == NULL) 
     bio = SSL_get_wbio (ssl);
 
   if (bio == NULL)
-    {
       return 0;
-    }
   
   rstat = mongo_ssl_verify_session (preverify_ok, err, ssl, bio, cert, _ctx, depth);
   _ctx->last_verify_result = rstat;
   if ( ! MONGO_SSL_SESSION_OK (rstat) )
-    {    
       return 0;
-    }
 
   return 1;
 }

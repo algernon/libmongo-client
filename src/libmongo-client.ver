@@ -160,3 +160,37 @@ LMC_0.1.8 {
   mongo_sync_connect_recovery_cache;
   mongo_sync_conn_get_last_error;
 } LMC_0.1.7;
+
+LMC_0.2.0 {
+ mongo_ssl_clear;
+ mongo_ssl_connect;
+ mongo_ssl_get_ca;
+ mongo_ssl_get_cert;
+ mongo_ssl_get_ciphers;
+ mongo_ssl_get_context;
+ mongo_ssl_get_crl;
+ mongo_ssl_get_key;
+ mongo_ssl_get_last_error;
+ mongo_ssl_get_last_verify_error;
+ mongo_ssl_get_last_verify_result;
+ mongo_ssl_get_trusted_DNs;
+ mongo_ssl_get_trusted_fingerprints;
+ mongo_ssl_get_verify_depth;
+ mongo_ssl_init;
+ mongo_ssl_is_cert_required;
+ mongo_ssl_is_trust_required;
+ mongo_ssl_lock;
+ mongo_ssl_set_auto_retry;
+ mongo_ssl_set_ca;
+ mongo_ssl_set_cert;
+ mongo_ssl_set_ciphers;
+ mongo_ssl_set_crl;
+ mongo_ssl_set_key;
+ mongo_ssl_set_security;
+ mongo_ssl_set_trusted_DNs;
+ mongo_ssl_set_trusted_fingerprints;
+ mongo_ssl_set_verify_depth;
+ mongo_ssl_unlock;
+ mongo_ssl_util_cleanup_lib;
+ mongo_ssl_util_init_lib;
+} LMC_0.1.8;
