@@ -17,11 +17,11 @@ test_func_mongo_sync_pool_secondary (void)
         "Secondary server not configured");
 
   ok (mongo_sync_pool_new (config.secondary_host,
-                           config.secondary_port, 1, 10) == NULL,
+                           config.secondary_port, 1, 10, NULL) == NULL,
       "mongo_sync_pool_new() should fail when connecting to a secondary");
 
   pool = mongo_sync_pool_new (config.primary_host,
-                              config.primary_port, 1, 10);
+                              config.primary_port, 1, 10, NULL);
   ok (pool != NULL,
       "mongo_sync_pool_new() works with slaves too");
 
@@ -98,7 +98,7 @@ test_func_mongo_sync_pool (void)
    * First we test that connecting to an invalid host fails.
    */
   pool = mongo_sync_pool_new ("invalid.example.com",
-                              config.primary_port, 10, 10);
+                              config.primary_port, 10, 10, NULL);
   ok (pool == NULL,
       "mongo_sync_pool_new() should fail with an invalid host");
 
@@ -109,7 +109,7 @@ test_func_mongo_sync_pool (void)
 
   pool = mongo_sync_pool_new (config.primary_host,
                               config.primary_port,
-                              10, 0);
+                              10, 0, NULL);
 
   ok (pool != NULL,
       "mongo_sync_pool_new() works");

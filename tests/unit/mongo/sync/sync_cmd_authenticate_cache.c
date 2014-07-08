@@ -19,7 +19,7 @@ test_mongo_sync_cmd_authenticate_cache (void)
                                            config.primary_host,
                                            config.primary_port);
 
-  c = mongo_sync_connect_recovery_cache (cache, TRUE);
+  c = mongo_sync_connect_recovery_cache (cache, TRUE, NULL);
 
   mongo_sync_cmd_user_add (c, config.db, "test", "s3kr1+");
 
@@ -37,7 +37,7 @@ test_mongo_sync_cmd_authenticate_cache (void)
   ok ((cache->auth.pw != NULL) && (strcmp (cache->auth.pw, "s3kr1+") == 0),
       "pw is cached");
 
-  c = mongo_sync_connect_recovery_cache (cache, TRUE);
+  c = mongo_sync_connect_recovery_cache (cache, TRUE, NULL);
 
   ok (c->auth.db != NULL, "db is loaded from cache");
 

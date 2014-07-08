@@ -1,0 +1,11 @@
+# usage: $ source env_setup
+
+export TEST_PRIMARY="127.0.0.1:27017"
+export TEST_SECONDARY="127.0.0.1:27019"
+
+# Development
+# Always use /3party instead of /certs here
+export SSL_CA_PATH="./ssl/3party/ca.pem"
+export SSL_CERT_PATH="./ssl/3party/client_full.pem"
+export SSL_KEY_PATH="./ssl/3party/client_full.pem"
+#export SSL_CRL_PATH="./ssl/3party/ca_crl.pem" # Uncomment this to try CRL check

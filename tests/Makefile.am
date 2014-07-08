@@ -90,21 +90,26 @@ mongo_wire_unit_tests	= \
 
 mongo_client_unit_tests	= \
 		unit/mongo/client/connect \
+        unit/mongo/client/connect_ssl \
 		unit/mongo/client/disconnect \
 		unit/mongo/client/packet_send \
+        unit/mongo/client/packet_send_ssl \
 		unit/mongo/client/packet_recv \
+        unit/mongo/client/packet_recv_ssl \
 		unit/mongo/client/connection_set_timeout \
 		unit/mongo/client/connection_get_requestid
 
 mongo_client_func_tests = \
-		func/mongo/client/f_client_big_packet
+		func/mongo/client/f_client_big_packet 
 
 mongo_sync_unit_tests	= \
 		unit/mongo/sync/sync_connect \
 		unit/mongo/sync/sync_connect_cache \
-		unit/mongo/sync/sync_conn_seed_add \
+		unit/mongo/sync/sync_connect_cache_ssl \
+        unit/mongo/sync/sync_conn_seed_add \
 		unit/mongo/sync/sync_conn_seed_add_cache \
 		unit/mongo/sync/sync_reconnect \
+        unit/mongo/sync/sync_reconnect_ssl \
 		unit/mongo/sync/sync_disconnect \
 		unit/mongo/sync/sync_get_set_auto_reconnect \
 		unit/mongo/sync/sync_get_set_safe_mode \
@@ -112,10 +117,12 @@ mongo_sync_unit_tests	= \
 		unit/mongo/sync/sync_get_set_max_insert_size \
 		unit/mongo/sync/sync_cmd_update \
 		unit/mongo/sync/sync_cmd_insert \
+      	unit/mongo/sync/sync_cmd_insert_ssl \
 		unit/mongo/sync/sync_cmd_insert_n \
 		unit/mongo/sync/sync_cmd_query \
 		unit/mongo/sync/sync_cmd_get_more \
 		unit/mongo/sync/sync_cmd_delete \
+        unit/mongo/sync/sync_cmd_delete_ssl \
 		unit/mongo/sync/sync_cmd_kill_cursors \
 		unit/mongo/sync/sync_cmd_custom \
 		unit/mongo/sync/sync_cmd_count \
@@ -127,6 +134,7 @@ mongo_sync_unit_tests	= \
 		unit/mongo/sync/sync_cmd_reset_error \
 		unit/mongo/sync/sync_cmd_is_master \
 		unit/mongo/sync/sync_cmd_ping \
+      	unit/mongo/sync/sync_cmd_ping_ssl \
 		unit/mongo/sync/sync_cmd_user_add \
 		unit/mongo/sync/sync_cmd_user_add_with_roles \
 		unit/mongo/sync/sync_cmd_user_remove \
@@ -135,7 +143,7 @@ mongo_sync_unit_tests	= \
 		unit/mongo/sync/sync_cmd_index_create \
 		unit/mongo/sync/sync_cmd_index_drop \
 		unit/mongo/sync/sync_cmd_index_drop_all \
-		unit/mongo/sync/sync_connect_from_cache_enforce_primary
+		unit/mongo/sync/sync_connect_from_cache_enforce_primary 
 
 mongo_sync_func_tests	= \
 		func/mongo/sync/f_sync_max_insert_size \
@@ -147,7 +155,8 @@ mongo_sync_func_tests	= \
 		func/mongo/sync/f_sync_oidtest \
 		func/mongo/sync/f_sync_auto_reauth \
 		func/mongo/sync/f_sync_invalid_getlasterror \
-		func/mongo/sync/f_sync_write_error
+		func/mongo/sync/f_sync_write_error \
+        func/mongo/sync/f_ssl
 
 mongo_sync_cursor_unit_tests	= \
 		unit/mongo/sync-cursor/sync_cursor_new \

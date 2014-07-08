@@ -23,6 +23,7 @@
 
 #include <bson.h>
 #include <mongo-wire.h>
+#include <mongo-ssl.h>
 
 #include <glib.h>
 
@@ -58,6 +59,20 @@ typedef struct _mongo_connection mongo_connection;
  * not used anymore.
  */
 mongo_connection *mongo_connect (const char *address, int port);
+
+/** Connect to MongoDB server via SSL.
+ *
+ * Connects to a single MongoDB server via an SSL-enabled secure connection.
+ *
+ * @param address is the address of the server (IP or hostname)
+ * @param port is the port to connect to
+ * @param conf stores SSL configuration and context
+ *
+ * @returns A newly allocated mongo_connection object or NULL on
+ * error. It is the responsibility of the caller to free it once it is
+ * not used anymore.
+ */
+mongo_connection *mongo_ssl_connect (const char *address, int port, mongo_ssl_ctx *conf); 
 
 /** Disconnect from a MongoDB server.
  *

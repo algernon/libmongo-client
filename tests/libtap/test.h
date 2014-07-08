@@ -5,6 +5,7 @@
 #include "bson.h"
 #include "mongo-wire.h"
 #include "mongo-sync.h"
+#include "mongo-ssl.h"
 #include "libmongo-private.h"
 
 #include <dlfcn.h>
@@ -16,6 +17,8 @@ typedef struct
 
   gchar *secondary_host;
   gint secondary_port;
+
+  mongo_ssl_ctx *ssl_settings;
 
   gchar *db;
   gchar *coll;
@@ -35,6 +38,19 @@ extern func_config_t config;
       endskip;					\
       test_env_free();				\
     } while (0)
+
+#define begin_ssl_tests(n)                          \
+  do									\
+    {									\
+      gboolean t = test_env_setup (); \
+      if (config.ssl_settings->ctx == NULL) t = FALSE; \
+      skip(!t, n, "Environment not set up for SSL tests")
+
+#define end_ssl_tests()			\
+      endskip;					\
+      test_env_free();				\
+    } while (0)
+
 
 #define RUN_TEST(n, t) \
   int                  \

@@ -26,3 +26,19 @@ to a *secondary* node by setting the `TEST_SECONDARY' environment
 variable:
 
   $ TEST_SECONDARY="127.0.0.1:27018"; export TEST_SECONDARY
+
+Environment vairables relevant for SSL configuration (SSL tests):
+ 
+ SSL_CERT_PATH, SSL_CA_PATH, SSL_KEY_PATH, SSL_KEY_PW, SSL_CRL_PATH
+
+Run "source ./ssl/env_setup" to automatically setup environment for SSL testing.
+By default these tests SHOULD FAIL because the CRL file specified revokes the server's
+certificate - proving that CRL check works. Use "unset SSL_CRL_PATH" to 
+prevent CRL check.
+
+Also, to make authentication succeed, you may create the test user like this:
+
+db.addUser({"user":"test","pwd":"s3kr1+","roles":[{"role":"dbOwner", "db":"test"}]
+
+For replica set tests, use the replSet parameter in your MongoDB configuration file.
+

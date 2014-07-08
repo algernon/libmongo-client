@@ -24,6 +24,7 @@
 #include <bson.h>
 #include <mongo-wire.h>
 #include <mongo-client.h>
+#include <mongo-ssl.h>
 #include <mongo-utils.h>
 #include <mongo-sync.h>
 #include <mongo-sync-cursor.h>

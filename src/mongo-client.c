@@ -40,6 +40,7 @@
 #include <stdlib.h>
 #include <errno.h>
 
+
 #ifndef HAVE_MSG_NOSIGNAL
 #define MSG_NOSIGNAL 0
 #endif
@@ -142,6 +143,134 @@ mongo_unix_connect (const char *path)
   return conn;
 }
 
+static
+mongo_ssl_session_cache_entry *
+_find_session (mongo_ssl_ctx *conf, const gchar *host, gint port)
+{
+  GList* l;
+  gchar* t;
+  mongo_ssl_session_cache_entry *ret = NULL;
+
+  if (!conf || !conf->session_cache || !host || !*host) 
+    return NULL;
+
+  t = g_strdup_printf ("%s:%d", host, port);
+
+  for (l = conf->session_cache; l != NULL; l = l->next)
+    {
+      mongo_ssl_session_cache_entry *ent = (mongo_ssl_session_cache_entry *) l->data;
+      if (ent == NULL) 
+        continue;
+      
+      if (strcmp (ent->target, t) == 0) 
+        {
+          ret = ent;
+          break;
+        }
+    }
+
+    g_free (t);
+    return ret;
+}
+
+mongo_connection * 
+mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf) 
+{
+  BIO *bio = NULL; 
+  SSL *ssl = NULL;
+  int fd, err;
+  gboolean conn_ok = FALSE;
+  gboolean verify_ok = FALSE;
+  mongo_ssl_session_cache_entry *se = NULL;
+  gboolean reused_session = FALSE;
+  gchar *t = NULL;
+  mongo_ssl_verify_result rstat = MONGO_SSL_V_UNDEF;
+
+  if (conf == NULL)
+    {
+      errno = EINVAL;
+      return NULL; 
+    }
+
+  if (conf->ctx == NULL)
+    {
+      errno = EINVAL;
+      return NULL;
+    }
+  
+  if ((bio = BIO_new_ssl_connect (conf->ctx)) == NULL) 
+    {
+      goto error;
+    }
+
+
+  BIO_get_ssl (bio, &ssl);
+  if (!ssl)
+    {
+      goto error;
+    }
+  
+  t = g_strdup_printf ("%s:%d", host, port);
+  if (!BIO_set_conn_hostname (bio, t)) 
+    {
+      goto error;
+    }
+
+  if (!SSL_set_tlsext_host_name (ssl, host))
+    {
+      goto error;
+    }
+
+  BIO_set_app_data (bio, (void*) host);
+  SSL_set_app_data (ssl, (void*) conf);
+  BIO_set_close (bio, BIO_CLOSE);
+
+  if (SSL_connect (ssl) != 1)
+    {
+      goto error;
+    }
+
+  conn_ok = TRUE;
+  
+  verify_ok = TRUE; /* callback mode (SSL_connect may fail on either socket error or protocol error) */
+  
+  mongo_connection *conn = g_new0 (mongo_connection, 1);
+    
+  fd = SSL_get_fd (ssl); 
+   
+  conn->fd = fd;    
+  conn->ssl = g_new0 (mongo_ssl_conn, 1); 
+  conn->ssl->bio = bio;
+  conn->ssl->conn = ssl;
+  conn->ssl->verification_status = rstat;
+  conn->ssl->super = conf;
+ 
+  g_free (t);
+
+  return conn;
+
+error:
+  g_free (t);
+  
+  conf->last_ssl_error = ERR_peek_last_error ();
+    
+  if (verify_ok)
+    conf->last_verify_result = MONGO_SSL_V_ERR_PROTO;
+  
+  if (ssl != NULL)
+    {
+      if (conn_ok) 
+        SSL_shutdown (ssl);
+      SSL_free (ssl);
+    }
+  else if (bio != NULL)
+    {
+      BIO_free_all (bio);
+    }
+  
+  return NULL;
+}
+
 mongo_connection *
 mongo_connect (const char *address, int port)
 {
@@ -164,6 +293,12 @@ mongo_disconnect (mongo_connection *conn)
       return;
     }
 
+  if (conn->ssl != NULL)
+    {
+      SSL_shutdown (conn->ssl->conn);
+      SSL_free (conn->ssl->conn); 
+    }
+  
   if (conn->fd >= 0)
     close (conn->fd);
 
@@ -179,7 +314,7 @@ mongo_packet_send (mongo_connection *conn, const mongo_packet *p)
   mongo_packet_header h;
   struct iovec iov[2];
   struct msghdr msg;
-
+  
   if (!conn)
     {
       errno = ENOTCONN;
@@ -214,8 +349,18 @@ mongo_packet_send (mongo_connection *conn, const mongo_packet *p)
   msg.msg_iov = iov;
   msg.msg_iovlen = 2;
 
-  if (sendmsg (conn->fd, &msg, MSG_NOSIGNAL) != (gint32)sizeof (h) + data_size)
-    return FALSE;
+  if (conn->ssl != NULL)
+    {
+      gint err = 0;
+
+      if ( (err = BIO_write (conn->ssl->bio, iov[0].iov_base, (gint32) sizeof (h))) != (gint32) sizeof (h))
+         return FALSE;
+        
+      if ( (err = BIO_write (conn->ssl->bio, iov[1].iov_base, data_size)) != data_size)
+        return FALSE;
+    }
+  else if (sendmsg (conn->fd, &msg, MSG_NOSIGNAL) != (gint32) sizeof (h) + data_size)
+     return FALSE;
 
   conn->request_id = h.id;
 
@@ -243,10 +388,29 @@ mongo_packet_recv (mongo_connection *conn)
     }
 
   memset (&h, 0, sizeof (h));
-  if (recv (conn->fd, &h, sizeof (mongo_packet_header),
-            MSG_NOSIGNAL | MSG_WAITALL) != sizeof (mongo_packet_header))
+  if (conn->ssl == NULL)
     {
-      return NULL;
+        if (recv (conn->fd, &h, sizeof (mongo_packet_header),
+                MSG_NOSIGNAL | MSG_WAITALL) != sizeof (mongo_packet_header))
+            {
+                return NULL;
+            }
+    } 
+  else
+    {
+        int c = 0;
+        do 
+            {
+                int err = BIO_read (conn->ssl->bio, &h, sizeof (mongo_packet_header));
+                if (err > 0) c += err;
+                else ERR_print_errors_fp (stderr);
+            } while (BIO_should_read (conn->ssl->bio));
+        
+        if (c != sizeof (mongo_packet_header))
+            {
+                conn->ssl->super->last_ssl_error = ERR_peek_last_error ();
+                return NULL;
+            }
     }
 
   h.length = GINT32_FROM_LE (h.length);
@@ -267,15 +431,36 @@ mongo_packet_recv (mongo_connection *conn)
 
   size = h.length - sizeof (mongo_packet_header);
   data = g_new0 (guint8, size);
-  if ((guint32)recv (conn->fd, data, size, MSG_NOSIGNAL | MSG_WAITALL) != size)
+  
+  if (conn->ssl == NULL)
     {
-      int e = errno;
+        if ((guint32)recv (conn->fd, data, size, MSG_NOSIGNAL | MSG_WAITALL) != size)
+            {
+                int e = errno;
 
-      g_free (data);
-      mongo_wire_packet_free (p);
-      errno = e;
-      return NULL;
+                g_free (data);
+                mongo_wire_packet_free (p);
+                errno = e;
+                return NULL;
+            }
     }
+    else
+        {
+            int c = 0;
+            do 
+                {
+                    int err = BIO_read (conn->ssl->bio, data, size);
+                    if (err > 0) c += err;
+                } while (BIO_should_read (conn->ssl->bio));
+        
+            if (c != size)
+                {
+                    conn->ssl->super->last_ssl_error = ERR_peek_last_error (); 
+                    g_free (data);
+                    mongo_wire_packet_free (p);
+                    return NULL;
+                }
+        }
 
   if (!mongo_wire_packet_set_data (p, data, size))
     {
