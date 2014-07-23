@@ -3,12 +3,22 @@
 #include <glib.h>
 #include "libmongo-private.h"
 
+#include <fcntl.h>
+#include <sys/types.h>
+
 #define THREAD_POOL_SIZE 5
 #define TEST_CASES (11 + THREAD_POOL_SIZE * 6)
 
 void
 test_func_mongo_sync_ssl_connect (void)
 {
+  char trusted_fp[64];
+  int fd;
+
+  fd = open("./ssl/3party/server.sign", O_RDONLY);  
+  read(fd, trusted_fp, 64);
+  close(fd);
+
   mongo_sync_connection *conn = NULL;
   // 1. Trusted Fingerprints Test (for 3party)
   GList *trusted_fps = NULL; 
@@ -21,7 +31,7 @@ test_func_mongo_sync_ssl_connect (void)
   ok (conn == NULL && (mongo_ssl_get_last_verify_result (config.ssl_settings) == MONGO_SSL_V_ERR_UNTRUSTED_FP), 
      "SSL connection fails with untrusted fingerprint");
 
-  g_list_append (trusted_fps, "SHA1:26:08:4E:33:50:2C:E1:AD:CD:37:87:56:30:4E:A9:7B:D5:AD:30:02"); // 3party/server.pem
+  g_list_append (trusted_fps, trusted_fp); // 3party/server.pem
 
   conn = mongo_sync_ssl_connect (config.primary_host, config.primary_port, TRUE, config.ssl_settings);
   
@@ -84,8 +94,9 @@ test_func_mongo_sync_ssl_insert_query (void)
 
   ok (mongo_sync_cmd_delete (conn, config.ns, 0, test_doc) == TRUE, "automatic reconnection over SSL should work (at this time: attempting delete command)");
 
-  //ok (mongo_sync_cmd_query (conn, config.ns, 0, 0, 1, test_doc, NULL) == NULL, "test document should not exist after delete");
-
+  /* ok (mongo_sync_cmd_query (conn, config.ns, 0, 0, 1, test_doc, NULL) == NULL, "test document should not exist after delete");
+    */
+    
   mongo_sync_disconnect (conn);
   bson_free (test_doc);
   g_free (test_string);

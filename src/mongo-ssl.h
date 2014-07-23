@@ -34,7 +34,6 @@ G_BEGIN_DECLS
  * mongo_sync_ssl_connect () to establish a synchronous SSL connection to the MongoDB database.
 **/
 
-
 /** Available cipher sets supported by MongoDB (as of 2.6). Use MONGO_SSL_CIPHERS_DEFAULT unless you have a strong reason to use a different option **/
 typedef enum {
   MONGO_SSL_CIPHERS_DEFAULT,
@@ -105,20 +104,6 @@ typedef struct {
   mongo_ssl_ctx *super;
 } mongo_ssl_conn;
 
-/** Initializes OpenSSL for you
- * 
- * SSL support depends on the OpenSSL library which has to be initialized before calling any SSL-related functions. 
- * This utility function provides proper initialization of OpenSSL that suits the requirements of this library. It takes care of
- * loading ciphers, error strings, threading setup, etc.
-**/
-void mongo_ssl_util_init_lib ();
-
-/** Cleans up OpenSSL for you
- *
- * When one does not use OpenSSL any more within a program, the memory allocated by the library should be freed, to avoid
- * memory leaks. This utility function takes care of the cleanup process.
-**/
-void mongo_ssl_util_cleanup_lib ();
 
 /** Initializes a Mongo SSL context object
  * 

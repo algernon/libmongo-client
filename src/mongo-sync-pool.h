@@ -65,7 +65,6 @@ typedef struct _mongo_sync_pool mongo_sync_pool;
  * master.
  * @param nslaves is the number of connections to make towards the
  * secondaries.
- * @param ssl_config Mongo SSL configuration & context (leave it NULL if not using SSL)
  *
  * @note Either @a nmasters or @a nslaves can be zero, but not both at
  * the same time.
@@ -78,6 +77,34 @@ typedef struct _mongo_sync_pool mongo_sync_pool;
  * pool when appropriate.
  */
 mongo_sync_pool *mongo_sync_pool_new (const gchar *host,
+                                      gint port,
+                                      gint nmasters, gint nslaves);
+
+
+/** Create a new synchronous connection pool.
+ *
+ * Sets up a connection pool towards a given MongoDB server, and all
+ * its secondaries (if any).
+ *
+ * @param host is the address of the server.
+ * @param port is the port to connect to.
+ * @param nmasters is the number of connections to make towards the
+ * master.
+ * @param nslaves is the number of connections to make towards the
+ * secondaries.
+ * @param ssl_config Mongo SSL configuration & context (leave it NULL if not using SSL)
+ *
+ * @note Either @a nmasters or @a nslaves can be zero, but not both at
+ * the same time.
+ *
+ * @note The @a host MUST be a master, otherwise the function will
+ * return an error.
+ *
+ * @returns A newly allocated mongo_sync_pool object, or NULL on
+ * error. It is the responsibility of the caller to close and free the
+ * pool when appropriate.
+ */
+mongo_sync_pool *mongo_sync_pool_new_ssl (const gchar *host,
                                       gint port,
                                       gint nmasters, gint nslaves, 
                                       mongo_ssl_ctx *ssl_config);

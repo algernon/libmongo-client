@@ -99,20 +99,13 @@ mongo_ssl_set_auto_retry (mongo_ssl_ctx *c, gboolean auto_retry)
   return TRUE;
 }
 
-void 
-mongo_ssl_util_cleanup_lib () 
+void __attribute__ ((destructor))
+mongo_ssl_util_cleanup_lib ()
 {
-  CONF_modules_free ();
-  ERR_remove_state (0);
-  ENGINE_cleanup ();	
-  CONF_modules_unload (1);
-  ERR_free_strings ();
-  EVP_cleanup ();
-  CRYPTO_cleanup_all_ex_data ();
   crypto_deinit_threading ();
 }
 
-static void
+void
 _ignore_signal (gint _sig) 
 {
   struct sigaction sa;
@@ -122,21 +115,21 @@ _ignore_signal (gint _sig)
   sigaction (_sig, &sa, NULL);
 }
 
-void
+void __attribute__ ((constructor))
 mongo_ssl_util_init_lib ()
 {
   _ignore_signal (SIGPIPE);
-  CRYPTO_malloc_init ();
-  OPENSSL_config (NULL);
   SSL_load_error_strings ();
-  ERR_load_BIO_strings ();
   SSL_library_init ();
-  crypto_init_threading ();        
+  OpenSSL_add_all_algorithms();
+  crypto_init_threading (); 
 }
 
 gboolean
 mongo_ssl_init (mongo_ssl_ctx* c) 
 {
+  g_assert (c != NULL);
+  
   g_static_mutex_init (&c->__guard);
   c->ca_path = NULL;
   c->cert_path = NULL;
@@ -378,6 +371,8 @@ mongo_ssl_set_crl (mongo_ssl_ctx *c, const gchar *crl_path)
   X509_VERIFY_PARAM_set_flags (p, X509_V_FLAG_CRL_CHECK | X509_V_FLAG_EXTENDED_CRL_SUPPORT); 
   SSL_CTX_set1_param (c->ctx, p);
   X509_VERIFY_PARAM_free (p);
+
+  c->crl_path = g_strdup (crl_path);
                                                                                                             
   return TRUE;
 }

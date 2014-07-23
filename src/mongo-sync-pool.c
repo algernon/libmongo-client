@@ -40,6 +40,7 @@ _mongo_sync_pool_connect (const gchar *host, gint port, gboolean slaveok, mongo_
   mongo_sync_connection *c = NULL;
   mongo_sync_pool_connection *conn;
 
+#if WITH_OPENSSL
   if (ssl_config != NULL)
     {
       if (ssl_config->ctx != NULL)
@@ -48,6 +49,7 @@ _mongo_sync_pool_connect (const gchar *host, gint port, gboolean slaveok, mongo_
         }
     } 
   else  
+#endif
     {
       c = mongo_sync_connect (host, port, slaveok);
     }
@@ -62,8 +64,9 @@ _mongo_sync_pool_connect (const gchar *host, gint port, gboolean slaveok, mongo_
   return conn;
 }
 
+static
 mongo_sync_pool *
-mongo_sync_pool_new (const gchar *host,
+_mongo_sync_pool_new (const gchar *host,
                      gint port,
                      gint nmasters, gint nslaves, mongo_ssl_ctx *ssl_config)
 {
@@ -161,6 +164,24 @@ mongo_sync_pool_new (const gchar *host,
   mongo_sync_disconnect ((mongo_sync_connection *)conn);
   return pool;
 }
+
+mongo_sync_pool *
+mongo_sync_pool_new (const gchar *host,
+                     gint port,
+                     gint nmasters, gint nslaves)
+{
+  return _mongo_sync_pool_new (host, port, nmasters, nslaves, NULL);
+}
+
+#if WITH_OPENSSL
+mongo_sync_pool *
+mongo_sync_pool_new_ssl (const gchar *host,
+                         gint port,
+                         gint nmasters, gint nslaves, mongo_ssl_ctx *ssl_config)
+{
+  return _mongo_sync_pool_new (host, port, nmasters, nslaves, ssl_config);
+}
+#endif
 
 void
 mongo_sync_pool_free (mongo_sync_pool *pool)

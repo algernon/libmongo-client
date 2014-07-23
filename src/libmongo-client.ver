@@ -191,6 +191,7 @@ LMC_0.2.0 {
  mongo_ssl_set_trusted_fingerprints;
  mongo_ssl_set_verify_depth;
  mongo_ssl_unlock;
- mongo_ssl_util_cleanup_lib;
- mongo_ssl_util_init_lib;
+ mongo_sync_pool_new_ssl;
+ mongo_sync_ssl_connect;
+ mongo_sync_ssl_connect_recovery_cache;
 } LMC_0.1.8;

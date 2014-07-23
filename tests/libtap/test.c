@@ -134,9 +134,10 @@ test_env_setup (void)
   config.primary_port = config.secondary_port = 27017;
   config.db = g_strdup ("test");
   config.coll = g_strdup ("libmongo");
-  
+
+#if WITH_OPENSSL
   config.ssl_settings = g_new0 (mongo_ssl_ctx, 1);
-  mongo_ssl_util_init_lib ();
+#endif
 
   if (getenv ("TEST_DB"))
     {
@@ -163,6 +164,8 @@ test_env_setup (void)
     mongo_util_parse_addr (getenv ("TEST_SECONDARY"), &config.secondary_host,
                            &config.secondary_port);
 
+#if WITH_OPENSSL
+  /*mongo_ssl_util_init_lib();*/
   if (getenv ("SSL_CERT_PATH") && strlen (getenv ("SSL_CERT_PATH")) > 0)
     {
       if (! mongo_ssl_init (config.ssl_settings))
@@ -209,7 +212,8 @@ test_env_setup (void)
       else 
          return FALSE;
     }
-
+#endif
+  
   return TRUE;
 }
 
@@ -222,15 +226,16 @@ test_env_free (void)
   g_free (config.coll);
   g_free (config.ns);
   g_free (config.gfs_prefix);
+
+#if WITH_OPENSSL
   mongo_ssl_clear (config.ssl_settings);
   g_free (config.ssl_settings);
-  mongo_ssl_util_cleanup_lib ();
+  /*mongo_ssl_util_cleanup_lib();*/
+#endif
 }
 
 void
 test_main_setup (void)
 {
-  //#ifndef HAVE_MSG_NOSIGNAL
-  signal(SIGPIPE, SIG_IGN); // BIO_write 
-  //#endif
+  signal(SIGPIPE, SIG_IGN); /* BIO_write */
 }

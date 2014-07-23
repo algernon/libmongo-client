@@ -28,8 +28,6 @@
 #include <unistd.h>
 #include <sys/mman.h>
 
-#include <stdio.h> // TODO: Temporary, only for debug purposes !!
-
 static void
 _list_free_full (GList **list)
 {
@@ -210,6 +208,7 @@ _recovery_cache_connect (mongo_sync_conn_recovery_cache *cache,
   return s;
 }
 
+#if WITH_OPENSSL
 static mongo_sync_connection *
 _recovery_cache_ssl_connect (mongo_sync_conn_recovery_cache *cache,
                          const gchar *address, gint port,
@@ -237,6 +236,7 @@ _recovery_cache_ssl_connect (mongo_sync_conn_recovery_cache *cache,
 
   return s;
 }
+#endif
 
 mongo_sync_connection *
 mongo_sync_connect (const gchar *address, gint port,
@@ -245,6 +245,7 @@ mongo_sync_connect (const gchar *address, gint port,
   return _recovery_cache_connect (NULL, address, port, slaveok);
 }
 
+#if WITH_OPENSSL
 mongo_sync_connection *mongo_sync_ssl_connect (const gchar *address,
                                                gint port,
                                                gboolean slaveok,
@@ -252,7 +253,7 @@ mongo_sync_connection *mongo_sync_ssl_connect (const gchar *address,
 {
   return _recovery_cache_ssl_connect (NULL, address, port, slaveok, ssl_config);
 }
-
+#endif
 
 
 mongo_sync_connection *
@@ -320,6 +321,7 @@ _mongo_sync_connect_replace (mongo_sync_connection *old,
   g_free (new);
 }
 
+#if WITH_OPENSSL
 static gboolean
 _is_ssl (mongo_sync_connection *conn)
 {
@@ -333,6 +335,7 @@ _is_ssl (mongo_sync_connection *conn)
 
   return FALSE;
 }
+#endif
 
 mongo_sync_connection *
 mongo_sync_reconnect (mongo_sync_connection *conn,
@@ -373,11 +376,13 @@ mongo_sync_reconnect (mongo_sync_connection *conn,
     {
       if (mongo_util_parse_addr (conn->rs.primary, &host, &port))
         {
-          if (!_is_ssl (conn)) 
-            nc = mongo_sync_connect (host, port, conn->slaveok); 
-          else 
+#if WITH_OPENSSL
+          if (_is_ssl (conn)) 
             nc = mongo_sync_ssl_connect (host, port, conn->slaveok, conn->super.ssl->super);
-
+          else 
+#endif
+            nc = mongo_sync_connect (host, port, conn->slaveok); 
+          
           g_free (host);
           if (nc)
             {
@@ -409,11 +414,13 @@ mongo_sync_reconnect (mongo_sync_connection *conn,
       if (!mongo_util_parse_addr (addr, &host, &port))
         continue;
 
-      if (!_is_ssl (conn))
-        nc = mongo_sync_connect (host, port, conn->slaveok);
-      else
+#if WITH_OPENSSL
+      if (_is_ssl (conn))
         nc = mongo_sync_ssl_connect (host, port, conn->slaveok, conn->super.ssl->super);
-
+      else
+#endif
+        nc = mongo_sync_connect (host, port, conn->slaveok);
+      
       g_free (host);
       if (!nc)
         continue;
@@ -441,11 +448,13 @@ mongo_sync_reconnect (mongo_sync_connection *conn,
       if (!mongo_util_parse_addr (addr, &host, &port))
         continue;
 
-      if (!_is_ssl (conn))
-        nc = mongo_sync_connect (host, port, conn->slaveok);
-      else
+#if WITH_OPENSSL
+      if (_is_ssl (conn))
         nc = mongo_sync_ssl_connect (host, port, conn->slaveok, conn->super.ssl->super);
-
+      else
+#endif
+        nc = mongo_sync_connect (host, port, conn->slaveok);
+      
       g_free (host);
 
       if (!nc)
@@ -2171,6 +2180,7 @@ _recovery_cache_pick_connect_from_list (mongo_sync_conn_recovery_cache *cache,
           if (!mongo_util_parse_addr (addr, &host, &port))
             continue;
 
+#if WITH_OPENSSL
           if (ssl_config != NULL)
             {
               if (ssl_config->ctx != NULL)
@@ -2178,6 +2188,7 @@ _recovery_cache_pick_connect_from_list (mongo_sync_conn_recovery_cache *cache,
                   c = _recovery_cache_ssl_connect (cache, host, port, slaveok, ssl_config);
                 }
              }
+#endif
           else 
             {
               c = _recovery_cache_connect (cache, host, port, slaveok);
@@ -2197,10 +2208,10 @@ _recovery_cache_pick_connect_from_list (mongo_sync_conn_recovery_cache *cache,
   return NULL;
 }
 
-mongo_sync_connection *
-mongo_sync_connect_recovery_cache (mongo_sync_conn_recovery_cache *cache,
-                                   gboolean slaveok,
-                                   mongo_ssl_ctx *ssl_config)
+static mongo_sync_connection *
+_sync_connect_recovery_cache (mongo_sync_conn_recovery_cache *cache,
+                              gboolean slaveok,
+                              mongo_ssl_ctx *ssl_config)
 {
   mongo_sync_connection *c = NULL;
   gchar *host;
@@ -2208,6 +2219,7 @@ mongo_sync_connect_recovery_cache (mongo_sync_conn_recovery_cache *cache,
 
   if (cache->rs.primary && mongo_util_parse_addr (cache->rs.primary, &host, &port))
     {
+#if WITH_OPENSSL      
       if (ssl_config != NULL)
         {
           if (ssl_config->ctx != NULL)
@@ -2216,6 +2228,7 @@ mongo_sync_connect_recovery_cache (mongo_sync_conn_recovery_cache *cache,
             }
         }
       else 
+#endif
         {
           c = _recovery_cache_connect (cache, host, port, slaveok);
         }
@@ -2238,6 +2251,22 @@ mongo_sync_connect_recovery_cache (mongo_sync_conn_recovery_cache *cache,
   return c;
 }
 
+mongo_sync_connection *
+mongo_sync_connect_recovery_cache (mongo_sync_conn_recovery_cache *cache,
+                                   gboolean slaveok)
+{
+  return _sync_connect_recovery_cache(cache, slaveok, NULL);
+}
+
+#if WITH_OPENSSL
+mongo_sync_connection *
+mongo_sync_ssl_connect_recovery_cache (mongo_sync_conn_recovery_cache *cache,
+                                       gboolean slaveok,
+                                       mongo_ssl_ctx *ssl_config)
+{
+  return _sync_connect_recovery_cache(cache, slaveok, ssl_config);
+}
+#endif
 
 const gchar *
 mongo_sync_conn_get_last_error (mongo_sync_connection *conn)

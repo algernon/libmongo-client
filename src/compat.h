@@ -22,8 +22,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-#if WITH_OPENSSL
-
+#if NO_GLIB_HASH_FUNCTIONS
 #include <openssl/md5.h>
 
 typedef enum {
@@ -41,7 +40,7 @@ void g_checksum_update (GChecksum *checksum,
                         ssize_t length);
 const char *g_checksum_get_string (GChecksum *checksum);
 
-#endif /* WITH_OPENSSL */
+#endif /* NO_GLIB_HASH_FUNCTIONS */
 
 #ifndef MSG_WAITALL
 #define MSG_WAITALL 0x40

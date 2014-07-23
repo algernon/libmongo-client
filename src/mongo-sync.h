@@ -93,15 +93,31 @@ gboolean mongo_sync_conn_recovery_cache_seed_add (mongo_sync_conn_recovery_cache
  * @param cache is the externally managed connection recovery cache object.
  * @param slaveok signals whether queries made against a slave are
  * acceptable.
- * @param ssl_config Mongo SSL configuration & context (leave it NULL if not using SSL)
  *
  * @returns A newly allocated mongo_sync_connection object, or NULL on
  * error. It is the responsibility of the caller to close and free the
  * connection when appropriate.
  */
 mongo_sync_connection *mongo_sync_connect_recovery_cache (mongo_sync_conn_recovery_cache *cache,
-                                                          gboolean slaveok,
-                                                          mongo_ssl_ctx *ssl_config);
+                                                          gboolean slaveok);
+
+/** Synchronously connect to a MongoDB server using an external
+ *  connection recovery cache object.
+ *
+ * Sets up a synchronous connection to a MongoDB server.
+ *
+ * @param cache is the externally managed connection recovery cache object.
+ * @param slaveok signals whether queries made against a slave are
+ * acceptable.
+ * @param ssl_config Mongo SSL configuration & context (leave it NULL if not using SSL)
+ *
+ * @returns A newly allocated mongo_sync_connection object, or NULL on
+ * error. It is the responsibility of the caller to close and free the
+ * connection when appropriate.
+ */
+mongo_sync_connection *mongo_sync_ssl_connect_recovery_cache (mongo_sync_conn_recovery_cache *cache,
+                                                              gboolean slaveok,
+                                                              mongo_ssl_ctx *ssl_config);
 
 /** Synchronously connect to a MongoDB server.
  *

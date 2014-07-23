@@ -16,7 +16,7 @@
 
 #include "config.h"
 
-#if WITH_OPENSSL
+#if NO_GLIB_HASH_FUNCTIONS
 
 #include "compat.h"
 #include <errno.h>
@@ -105,4 +105,4 @@ g_checksum_get_string (GChecksum *checksum)
   return checksum->hex_digest;
 }
 
-#endif /* WITH_OPENSSL */
+#endif /* NO_GLIB_HASH_FUNCTIONS */

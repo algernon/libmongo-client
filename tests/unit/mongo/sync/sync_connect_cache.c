@@ -9,7 +9,7 @@ test_mongo_sync_conn_recovery_cache_connection (void)
 
   cache = mongo_sync_conn_recovery_cache_new ();
 
-  ok (mongo_sync_connect_recovery_cache (cache, FALSE, NULL) == NULL,
+  ok (mongo_sync_connect_recovery_cache (cache, FALSE) == NULL,
       "mongo_sync_connect_recovery_cache() should fail when cache is empty");
 
   begin_network_tests (4);
@@ -19,19 +19,19 @@ test_mongo_sync_conn_recovery_cache_connection (void)
                                                config.primary_port) == TRUE,
       "mongo_sync_conn_recovery_cache_seed_add() works");
 
-  ok ((c = mongo_sync_connect_recovery_cache (cache, FALSE, NULL)) != NULL,
+  ok ((c = mongo_sync_connect_recovery_cache (cache, FALSE)) != NULL,
       "mongo_sync_connect_recovery_cache() works");
 
   mongo_sync_disconnect (c);
 
-  ok ((c = mongo_sync_connect_recovery_cache (cache, FALSE, NULL)) != NULL,
+  ok ((c = mongo_sync_connect_recovery_cache (cache, FALSE)) != NULL,
       "mongo_sync_connect_recovery_cache() works after disconnect");
 
   mongo_sync_disconnect (c);
 
   mongo_sync_conn_recovery_cache_discard (cache);
 
-  ok (mongo_sync_connect_recovery_cache (cache, TRUE, NULL) == NULL,
+  ok (mongo_sync_connect_recovery_cache (cache, TRUE) == NULL,
       "mongo_sync_connect_recovery_cache() should fail when cache is discarded");
 
   mongo_sync_conn_recovery_cache_free (cache);

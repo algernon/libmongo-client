@@ -7,11 +7,15 @@ libmongo_client_la_LIBADD	= @GLIB_LIBS@ @OPENSSL_LIBS@
 libmongo_client_la_CFLAGS	= @GLIB_CFLAGS@ @OPENSSL_CFLAGS@
 libmongo_client_la_LDFLAGS	= -version-info ${LMC_CURRENT}:${LMC_REVISION}:${LMC_AGE} @vsymldflags@
 
+if HAVE_OPENSSL
+libmongo_client_ssl_SOURCES	= \
+	mongo-ssl.c mongo-ssl.h
+endif
+
 libmongo_client_la_SOURCES	= \
 	compat.c compat.h \
 	bson.c bson.h \
 	mongo-wire.c mongo-wire.h \
-    mongo-ssl.c mongo-ssl.h \
 	mongo-client.c mongo-client.h \
 	mongo-utils.c mongo-utils.h \
 	mongo-sync.c mongo-sync.h \
@@ -20,6 +24,7 @@ libmongo_client_la_SOURCES	= \
 	sync-gridfs.c sync-gridfs.h \
 	sync-gridfs-chunk.c sync-gridfs-chunk.h \
 	sync-gridfs-stream.c sync-gridfs-stream.h \
+	${libmongo_client_ssl_SOURCES} \
 	mongo.h \
 	libmongo-private.h libmongo-macros.h
 
