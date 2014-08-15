@@ -654,8 +654,8 @@ _get_dn (X509_NAME *name, GString *dn, gboolean reverse)
   gchar *buf;
   long len;
 
-  g_assert (name != NULL);
-  g_assert (dn != NULL);
+  g_return_if_fail (name);
+  g_return_if_fail (dn);
 
   bio = BIO_new (BIO_s_mem ());
   X509_NAME_print_ex (bio, name, 0,
@@ -673,8 +673,8 @@ _get_dn (X509_NAME *name, GString *dn, gboolean reverse)
 static gboolean
 check_cn (const X509 *cert, const gchar *target_hostname)
 {
-  g_assert (cert != NULL);
-  g_assert (target_hostname != NULL);
+  g_return_val_if_fail (cert, FALSE);
+  g_return_val_if_fail (target_hostname, FALSE);
 
   gboolean sni_match = FALSE;
   int i = 0;
@@ -693,18 +693,20 @@ check_cn (const X509 *cert, const gchar *target_hostname)
   gchar *_cn = g_locale_to_utf8 ("cn", -1, NULL, NULL, NULL);
   gchar *_cni = g_utf8_casefold (_cn, -1);
 
-  while (curr_field != NULL)
+  while (curr_field)
     {
       field_parts = g_strsplit (curr_field, "=", 2);
       curr_key = g_strstrip (field_parts[0]);
       curr_value = g_strstrip (field_parts[1]);
 
-      if (curr_key == NULL || curr_value == NULL) continue;
+      if (!curr_key || !curr_value)
+        continue;
 
       gchar *curr_key_utf8 = g_utf8_casefold (curr_key, -1);
       if (strcmp ((const char*) curr_key_utf8, (const char*) _cni) == 0)
         {
-          if (g_pattern_match_simple ((const gchar*) curr_value, (const gchar*) target_hostname))
+          if (g_pattern_match_simple ((const gchar*) curr_value,
+                                      (const gchar*) target_hostname))
             {
               sni_match = TRUE;
             }
@@ -713,7 +715,8 @@ check_cn (const X509 *cert, const gchar *target_hostname)
       g_strfreev (field_parts);
       g_free (curr_key_utf8);
 
-      if (sni_match) break;
+      if (sni_match)
+        break;
 
       i += 1;
       curr_field = dn_parts[i];
@@ -730,8 +733,8 @@ check_cn (const X509 *cert, const gchar *target_hostname)
 static gboolean
 check_altnames (const X509 *cert, const gchar *target_hostname)
 {
-  g_assert (cert != NULL);
-  g_assert (target_hostname != NULL);
+  g_return_val_if_fail (cert, FALSE);
+  g_return_val_if_fail (target_hostname, FALSE);
 
   int i, num = -1;
   STACK_OF (GENERAL_NAME) *names = NULL;
@@ -739,12 +742,14 @@ check_altnames (const X509 *cert, const gchar *target_hostname)
 
   names = X509_get_ext_d2i ((X509*) cert, NID_subject_alt_name, NULL, NULL);
 
-  if (names == NULL) return FALSE;
+  if (!names)
+    return FALSE;
 
   num = sk_GENERAL_NAME_num (names);
 
   gchar *t = g_locale_to_utf8 (target_hostname, -1, NULL, NULL, NULL);
-  if (t == NULL) t = (gchar*) target_hostname;
+  if (!t)
+    t = (gchar*) target_hostname;
 
   for (i = 0; i < num; ++i)
     {
@@ -753,19 +758,23 @@ check_altnames (const X509 *cert, const gchar *target_hostname)
         {
           gchar *dns;
           int dns_len = -1;
-          if ( (dns_len = ASN1_STRING_to_UTF8 ((unsigned char**) &dns, curr->d.dNSName)) < 0) continue;
-          if (dns_len != strlen (dns)) continue;
+          if ( (dns_len = ASN1_STRING_to_UTF8 ((unsigned char**) &dns, curr->d.dNSName)) < 0)
+            continue;
+
+          if (dns_len != strlen (dns))
+            continue;
+
           if (g_pattern_match_simple ((const gchar*) dns, (const gchar*) t))
-            {
-              sni_match = TRUE;
-            }
+            sni_match = TRUE;
 
           OPENSSL_free (dns);
-          if (sni_match) break;
+          if (sni_match)
+            break;
         }
     }
 
-  if (t != target_hostname) g_free (t);
+  if (t != target_hostname)
+    g_free (t);
   sk_GENERAL_NAME_free (names);
 
   return sni_match;
@@ -778,14 +787,17 @@ _get_X509_digest (const X509 *x, GString *hash_string)
   unsigned int n;
   unsigned char md[EVP_MAX_MD_SIZE];
 
-  g_assert (hash_string != NULL);
+  g_return_val_if_fail (hash_string, FALSE);
 
   if (!X509_digest (x, EVP_sha1(), md, &n))
     return FALSE;
 
   g_string_append (hash_string, "SHA1:");
   for (j = 0; j < (int) n; j++)
-    g_string_append_printf (hash_string, "%02X%c", md[j], (j + 1 == (int) n) ? '\0' : ':');
+    g_string_append_printf (hash_string,
+                            "%02X%c",
+                            md[j],
+                            (j + 1 == (int) n) ? '\0' : ':');
 
   return TRUE;
 }
@@ -793,8 +805,8 @@ _get_X509_digest (const X509 *x, GString *hash_string)
 static gboolean
 check_fingerprint (const X509* cert, const mongo_ssl_ctx *c)
 {
-  g_assert (c != NULL);
-  g_assert (cert != NULL);
+  g_return_val_if_fail (c, FALSE);
+  g_return_val_if_fail (cert, FALSE);
 
   GString *hash = g_string_sized_new (EVP_MAX_MD_SIZE * 3);
   GList *curr_fingerprint = c->trusted_fingerprints;
@@ -803,9 +815,10 @@ check_fingerprint (const X509* cert, const mongo_ssl_ctx *c)
 
   if (_get_X509_digest (cert, hash) && curr_fingerprint)
     {
-      for (; curr_fingerprint != NULL; curr_fingerprint = g_list_next (curr_fingerprint))
+      for (; curr_fingerprint; curr_fingerprint = g_list_next (curr_fingerprint))
         {
-          if (strncasecmp ((const gchar *) (curr_fingerprint->data), hash->str, hash->len) == 0)
+          if (strncasecmp ((const gchar *) (curr_fingerprint->data),
+                            hash->str, hash->len) == 0)
             {
               match = TRUE;
               break;
@@ -821,8 +834,8 @@ check_fingerprint (const X509* cert, const mongo_ssl_ctx *c)
 static gboolean
 check_dn (const X509 *cert, const mongo_ssl_ctx *c)
 {
-  g_assert (c != NULL);
-  g_assert (cert != NULL);
+  g_return_val_if_fail (c, FALSE);
+  g_return_val_if_fail (cert, FALSE);
 
   GString *dn, *dn_rev;
   gchar* _dn, *_dn_rev, *t;
@@ -839,7 +852,7 @@ check_dn (const X509 *cert, const mongo_ssl_ctx *c)
   _dn_rev = g_utf8_casefold (dn_rev->str, -1);
 
 
-  for (; curr_dn != NULL; curr_dn = g_list_next (curr_dn))
+  for (; curr_dn; curr_dn = g_list_next (curr_dn))
     {
       t = g_utf8_casefold (curr_dn->data, -1);
 
@@ -869,11 +882,10 @@ mongo_ssl_verify_session (int prevok,
                           X509 *cert,
                           mongo_ssl_ctx *ctx,
                           int depth) {
-  g_assert (c != NULL);
-  g_assert (b != NULL);
-  g_assert (ctx != NULL);
+  g_return_val_if_fail (c , MONGO_SSL_V_ERR_NO_CERT);
+  g_return_val_if_fail (b, MONGO_SSL_V_ERR_NO_CERT);
+  g_return_val_if_fail (ctx, MONGO_SSL_V_ERR_NO_CERT);
 
-  /*X509 *cert;*/
   char *target_hostname;
 
   gboolean sni_match = FALSE;
@@ -891,7 +903,6 @@ mongo_ssl_verify_session (int prevok,
         return MONGO_SSL_V_OK_ALL;
     }
 
-  /* cert = SSL_get_peer_certificate (c); */
   target_hostname = BIO_get_conn_hostname (b);
 
   if (ctx->cert_required && (cert == NULL))
@@ -934,9 +945,10 @@ mongo_ssl_verify_session (int prevok,
 
 
   /* Hostname check */
-  if (target_hostname != NULL)
+  if (target_hostname)
     {
-      sni_match = (check_cn (cert, target_hostname)) || (check_altnames (cert, target_hostname));
+      sni_match = check_cn (cert, target_hostname) ||
+                  check_altnames (cert, target_hostname);
 
       if (! sni_match)
         {
@@ -968,8 +980,7 @@ mongo_ssl_verify_callback (int preverify_ok, X509_STORE_CTX *ctx)
   _ctx = (mongo_ssl_ctx *) SSL_get_app_data (ssl);
   depth = X509_STORE_CTX_get_error_depth (ctx);
 
-  if (_ctx == NULL)
-      return 0;
+  g_return_val_if_fail(_ctx, 0);
 
   _ctx->last_verify_err_code = err;
 
@@ -979,12 +990,12 @@ mongo_ssl_verify_callback (int preverify_ok, X509_STORE_CTX *ctx)
     bio = SSL_get_wbio (ssl);
 
   if (bio == NULL)
-      return 0;
+    return 0;
 
   rstat = mongo_ssl_verify_session (preverify_ok, err, ssl, bio, cert, _ctx, depth);
   _ctx->last_verify_result = rstat;
   if ( ! MONGO_SSL_SESSION_OK (rstat) )
-      return 0;
+    return 0;
 
   return 1;
 }
@@ -993,7 +1004,7 @@ mongo_ssl_verify_callback (int preverify_ok, X509_STORE_CTX *ctx)
 const gchar *
 mongo_ssl_get_last_error (const mongo_ssl_ctx *c)
 {
-  g_assert (c != NULL);
+  g_return_val_if_fail (c, NULL);
 
   return (const gchar*) ERR_error_string (c->last_ssl_error, NULL);
 }
@@ -1001,7 +1012,7 @@ mongo_ssl_get_last_error (const mongo_ssl_ctx *c)
 mongo_ssl_verify_result
 mongo_ssl_get_last_verify_result (const mongo_ssl_ctx *c)
 {
-  g_assert (c != NULL);
+  g_return_val_if_fail (c, MONGO_SSL_V_UNDEF);
 
   return c->last_verify_result;
 }
@@ -1009,7 +1020,7 @@ mongo_ssl_get_last_verify_result (const mongo_ssl_ctx *c)
 const gchar *
 mongo_ssl_get_last_verify_error (const mongo_ssl_ctx *c)
 {
-  g_assert (c != NULL);
+  g_return_val_if_fail (c, NULL);
 
   return (const gchar *) X509_verify_cert_error_string (c->last_verify_err_code);
 }
@@ -1017,14 +1028,14 @@ mongo_ssl_get_last_verify_error (const mongo_ssl_ctx *c)
 void
 mongo_ssl_lock (mongo_ssl_ctx *c)
 {
-  g_assert (c != NULL);
+  g_return_if_fail (c);
 
   g_static_mutex_lock (&c->__guard);
 }
 
 void mongo_ssl_unlock (mongo_ssl_ctx *c)
 {
-  g_assert (c != NULL);
+  g_return_if_fail (c);
 
   g_static_mutex_unlock (&c->__guard);
 }

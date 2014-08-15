@@ -160,6 +160,7 @@ AC_CONFIG_FILES([Doxyfile
 	src/Makefile
 	src/libmongo-client.pc
 	tests/Makefile
+  tests/ssl/3party/Makefile
 	tests/libtap/Makefile
 ])
 AC_OUTPUT
