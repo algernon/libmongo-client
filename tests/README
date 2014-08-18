@@ -31,10 +31,12 @@ Environment vairables relevant for SSL configuration (SSL tests):
  
  SSL_CERT_PATH, SSL_CA_PATH, SSL_KEY_PATH, SSL_KEY_PW, SSL_CRL_PATH
 
-Run "source ./ssl/env_setup" to automatically setup environment for SSL testing.
-By default these tests SHOULD FAIL because the CRL file specified revokes the server's
-certificate - proving that CRL check works. Use "unset SSL_CRL_PATH" to 
-prevent CRL check.
+To set these variables automatically, do the following:
+ 1. Enter ssl/3party
+ 2. Run 'make' to generate certificates, keys, CRLs, etc.
+ 3. Run 'make revoke' to revoke server certificate in CRL
+
+Then, you may go back to 'tests/' and run 'make check' to run all test cases.
 
 Also, to make authentication succeed, you may create the test user like this:
 

@@ -23,7 +23,7 @@
 #include <assert.h>
 #include <pthread.h>
 #include <string.h>
-
+#include <ctype.h>
 #include <sys/stat.h>
 
 #define HIGH_CIPHERS "HIGH:!EXPORT:!aNULL@STRENGTH"
@@ -665,7 +665,7 @@ _get_dn (X509_NAME *name, GString *dn, gboolean reverse)
                       (reverse ? XN_FLAG_DN_REV : 0));
   len = BIO_get_mem_data (bio, &buf);
   g_string_truncate (dn, 0);
-  g_string_append_len (dn, buf, len);
+  g_string_append_len (dn, buf, MIN(127, len));
   BIO_free (bio);
 }
 
@@ -831,6 +831,29 @@ check_fingerprint (const X509* cert, const mongo_ssl_ctx *c)
   return match;
 }
 
+static gchar *
+remove_unwanted_spaces(gchar *dn)
+{
+  gchar *ret = g_new0(gchar, strlen(dn) + 1);
+  gchar *src = dn;
+  gchar *dst = ret;
+  gboolean comma = FALSE;
+
+  while (*src)
+    {
+      if (!(isspace(*src) && comma))
+        {
+          if (! ((!*(src + 1)) && (isspace(*src))) )
+            *dst++ = *src;
+        }
+      comma = (*src == ',');
+      src++;
+    }
+
+  g_free (dn);
+  return ret;
+}
+
 static gboolean
 check_dn (const X509 *cert, const mongo_ssl_ctx *c)
 {
@@ -839,23 +862,24 @@ check_dn (const X509 *cert, const mongo_ssl_ctx *c)
 
   GString *dn, *dn_rev;
   gchar* _dn, *_dn_rev, *t;
-  GList *curr_dn = c->trusted_DNs;
+  GList *curr_dn = NULL;
   gboolean match = FALSE;
 
+  curr_dn = c->trusted_DNs;
   dn = g_string_sized_new (128);
   _get_dn (X509_get_subject_name ((X509*) cert), dn, FALSE);
   dn_rev = g_string_sized_new (128);
   _get_dn (X509_get_subject_name ((X509*) cert), dn_rev, TRUE);
 
-
   _dn = g_utf8_casefold (dn->str, -1);
   _dn_rev = g_utf8_casefold (dn_rev->str, -1);
-
+  _dn = remove_unwanted_spaces (_dn);
+  _dn_rev = remove_unwanted_spaces (_dn_rev);
 
   for (; curr_dn; curr_dn = g_list_next (curr_dn))
     {
-      t = g_utf8_casefold (curr_dn->data, -1);
-
+      t = g_utf8_casefold ((const gchar*) curr_dn->data, -1);
+      t = remove_unwanted_spaces (t);
       if (g_pattern_match_simple ((const gchar*) t, (const gchar*) _dn) ||
           g_pattern_match_simple ((const gchar*) t, (const gchar*) _dn_rev))
             {
@@ -865,7 +889,9 @@ check_dn (const X509 *cert, const mongo_ssl_ctx *c)
        g_free (t);
     }
 
+
   g_string_free (dn, TRUE);
+  g_string_free (dn_rev, TRUE);
   g_free (_dn);
   g_free (_dn_rev);
 

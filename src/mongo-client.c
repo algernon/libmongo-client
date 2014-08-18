@@ -64,6 +64,7 @@ mongo_tcp_connect (const char *host, int port)
 
   memset (&hints, 0, sizeof (hints));
   hints.ai_socktype = SOCK_STREAM;
+  hints.ai_family = AF_UNSPEC;
 
 #ifdef __linux__
   hints.ai_flags = AI_ADDRCONFIG;

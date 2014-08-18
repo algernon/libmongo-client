@@ -6,3 +6,6 @@
 cert*
 crl*
 *.old
+mongodb*conf
+*.sign
+*.dn

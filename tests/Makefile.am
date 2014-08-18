@@ -200,14 +200,14 @@ mongo_sync_gridfs_stream_func_tests = \
 
 if HAVE_OPENSSL
 mongo_ssl_unit_tests = \
+		unit/mongo/client/connect_ssl \
+		unit/mongo/client/packet_recv_ssl \
+		unit/mongo/client/packet_send_ssl \
 		unit/mongo/sync/sync_cmd_ping_ssl \
 		unit/mongo/sync/sync_cmd_delete_ssl \
 		unit/mongo/sync/sync_cmd_insert_ssl \
 		unit/mongo/sync/sync_reconnect_ssl \
-		unit/mongo/sync/sync_connect_cache_ssl \
-		unit/mongo/client/packet_recv_ssl \
-		unit/mongo/client/packet_send_ssl \
-		unit/mongo/client/connect_ssl
+		unit/mongo/sync/sync_connect_cache_ssl
 
 mongo_ssl_func_tests = \
 		func/mongo/sync/f_ssl
