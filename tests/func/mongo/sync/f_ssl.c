@@ -7,7 +7,7 @@
 #include <sys/types.h>
 
 #define THREAD_POOL_SIZE 5
-#define TEST_CASES (11 + THREAD_POOL_SIZE * 6)
+#define TEST_CASES (11 + THREAD_POOL_SIZE * 7)
 
 void
 test_func_mongo_sync_ssl_connect (void)
@@ -154,7 +154,7 @@ ssl_insert_thread (gpointer _c)
 
 
 gpointer
-ssl_delete_thread (gpointer _conn) // here, we pass the connection object
+ssl_delete_thread (gpointer _conn)
 {
   mongo_sync_connection *conn = (mongo_sync_connection*) _conn;
   static int delete_count = 0;
@@ -248,7 +248,9 @@ ssl_ping_fail_thread (gpointer _c)
                                                         c);
 
   ok ((conn == NULL) && (mongo_ssl_get_last_verify_result (c) == MONGO_SSL_V_ERR_PROTO),
-      "connection should fail on a thread that initiates CRL check");
+      "Connection should fail on a thread that initiates CRL check");
+  ok (!strcmp (mongo_ssl_get_last_verify_error (c), "certificate revoked"),
+      "Failed CRL check should result in a relevant error message");
   /*we could ping here, but why? :)*/
   mongo_ssl_unlock (c);
 

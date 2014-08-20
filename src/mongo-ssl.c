@@ -580,10 +580,7 @@ mongo_ssl_ciphers
 mongo_ssl_get_ciphers (const mongo_ssl_ctx *c)
 {
   if (c == NULL || c->ctx == NULL)
-    {
-      errno = EINVAL;
-      return FALSE;
-    }
+    g_assert_not_reached ();
 
   if (strcmp (c->cipher_list, AES_CIPHERS) == 0)
     return MONGO_SSL_CIPHERS_AES;
@@ -594,7 +591,7 @@ mongo_ssl_get_ciphers (const mongo_ssl_ctx *c)
   else if (strcmp (c->cipher_list, HIGH_CIPHERS) == 0)
     return MONGO_SSL_CIPHERS_DEFAULT;
   else
-   g_assert (FALSE); /* the structure has been manipulated by hand */
+    g_assert_not_reached ();
 }
 
 void

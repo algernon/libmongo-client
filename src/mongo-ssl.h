@@ -511,7 +511,7 @@ void mongo_ssl_unlock (mongo_ssl_ctx *ctx);
  *
  * @returns The underlying SSL_CTX object
 **/
-SSL_CTX *mongo_ssl_get_context(const mongo_ssl_ctx *ctx);
+SSL_CTX *mongo_ssl_get_context (const mongo_ssl_ctx *ctx);
 
 G_END_DECLS
 
