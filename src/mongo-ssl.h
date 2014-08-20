@@ -87,10 +87,8 @@ typedef enum {
 
 #define MONGO_SSL_SESSION_OK(s) ( ((int) s > (int) MONGO_SSL_V_ERR_PROTO) )
 
-typedef struct {
-  gchar *target;
-  SSL_SESSION *sess;
-} mongo_ssl_session_cache_entry;
+struct _mongo_ssl_ctx;
+struct _mongo_ssl_conn;
 
 /** An internal context structure that is a wrapper for the SSL_CTX
  * object.
@@ -110,27 +108,8 @@ typedef struct {
  * context (with no manipulation) from multiple threads simultaneously
  * without locking.
  */
-typedef struct {
-  gchar *ca_path;
-  gchar *cert_path;
-  gchar *crl_path;
-  gchar *key_path;
-  gchar *cipher_list;
-  gchar *key_pw;
-  gint verify_depth;
+typedef struct _mongo_ssl_ctx mongo_ssl_ctx;
 
-  SSL_CTX *ctx;
-  X509_VERIFY_PARAM *params;
-  glong last_ssl_error;
-  mongo_ssl_verify_result last_verify_result;
-  glong last_verify_err_code;
-  GList *session_cache;
-  GList *trusted_fingerprints;
-  GList *trusted_DNs;
-  gboolean /*server_*/cert_required;
-  gboolean trust_required;
-  GStaticMutex __guard;
-} mongo_ssl_ctx;
 
 /** An SSL connection wrapper that consist of a connection (SSL)
  * object and a bidirectional I/O object (BIO) that represents the
@@ -139,12 +118,13 @@ typedef struct {
  * mongo_ssl_conn object should be manipulated only by one thread at a
  * time.
  */
-typedef struct {
-  BIO* bio;
-  SSL* conn;
-  mongo_ssl_verify_result verification_status;
-  mongo_ssl_ctx *super;
-} mongo_ssl_conn;
+typedef struct _mongo_ssl_conn mongo_ssl_conn;
+
+/** Allocates a mongo_ssl_ctx object
+ *
+ * Use this function to dynamically create a mongo_ssl_ctx instance
+ */
+mongo_ssl_ctx *mongo_ssl_ctx_new ();
 
 /** Initializes a Mongo SSL context object
  *

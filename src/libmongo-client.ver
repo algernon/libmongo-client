@@ -164,6 +164,7 @@ LMC_0.1.8 {
 
 LMC_0.2.0 {
  mongo_ssl_clear;
+ mongo_ssl_ctx_new;
  mongo_ssl_connect;
  mongo_ssl_get_ca;
  mongo_ssl_get_cert;

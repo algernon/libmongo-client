@@ -18,6 +18,7 @@
  * SSL support main source file
  **/
 #include "mongo-ssl.h"
+#include "libmongo-private.h" /* For SSL support structs */
 
 #include <glib.h>
 #include <assert.h>
@@ -134,6 +135,12 @@ mongo_ssl_set_auto_retry (mongo_ssl_ctx *c, gboolean auto_retry)
   SSL_CTX_set_mode (c->ctx, mode_new);
 
   return TRUE;
+}
+
+mongo_ssl_ctx *
+mongo_ssl_ctx_new ()
+{
+  return g_new0 (mongo_ssl_ctx, 1);
 }
 
 gboolean

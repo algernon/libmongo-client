@@ -225,6 +225,36 @@ struct _mongo_sync_gridfs_stream
   };
 };
 
+/** Internal SSL support structures **/
+struct _mongo_ssl_ctx {
+  gchar *ca_path;
+  gchar *cert_path;
+  gchar *crl_path;
+  gchar *key_path;
+  gchar *cipher_list;
+  gchar *key_pw;
+  gint verify_depth;
+
+  SSL_CTX *ctx;
+  X509_VERIFY_PARAM *params;
+  glong last_ssl_error;
+  mongo_ssl_verify_result last_verify_result;
+  glong last_verify_err_code;
+  GList *session_cache;
+  GList *trusted_fingerprints;
+  GList *trusted_DNs;
+  gboolean /*server_*/cert_required;
+  gboolean trust_required;
+  GStaticMutex __guard;
+};
+
+struct _mongo_ssl_conn {
+  BIO* bio;
+  SSL* conn;
+  mongo_ssl_verify_result verification_status;
+  mongo_ssl_ctx *super;
+};
+
 /** @internal Construct a kill cursors command, using a va_list.
  *
  * @param id is the sequence id.

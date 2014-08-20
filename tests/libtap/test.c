@@ -9,7 +9,6 @@
 #include <signal.h>
 #endif
 
-
 func_config_t config;
 
 bson *
@@ -135,7 +134,7 @@ test_env_setup (void)
   config.db = g_strdup ("test");
   config.coll = g_strdup ("libmongo");
 
-  config.ssl_settings = g_new0 (mongo_ssl_ctx, 1);
+  config.ssl_settings = mongo_ssl_ctx_new ();
 
   if (getenv ("TEST_DB"))
     {
