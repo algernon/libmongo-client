@@ -144,7 +144,6 @@ mongo_unix_connect (const char *path)
   return conn;
 }
 
-#if WITH_OPENSSL
 mongo_connection *
 mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
 {
@@ -228,7 +227,6 @@ error:
 
   return NULL;
 }
-#endif
 
 mongo_connection *
 mongo_connect (const char *address, int port)
@@ -252,13 +250,11 @@ mongo_disconnect (mongo_connection *conn)
       return;
     }
 
-#if WITH_OPENSSL
   if (conn->ssl != NULL)
     {
       SSL_shutdown (conn->ssl->conn);
       SSL_free (conn->ssl->conn);
     }
-#endif
 
   if (conn->fd >= 0)
     close (conn->fd);
@@ -311,7 +307,6 @@ mongo_packet_send (mongo_connection *conn, const mongo_packet *p)
   msg.msg_iov = iov;
   msg.msg_iovlen = 2;
 
-#if WITH_OPENSSL
   if (conn->ssl != NULL)
     {
       gint err = 0;
@@ -323,9 +318,8 @@ mongo_packet_send (mongo_connection *conn, const mongo_packet *p)
         return FALSE;
     }
   else
-#endif
-  if (sendmsg (conn->fd, &msg, MSG_NOSIGNAL) != (gint32) sizeof (h) + data_size)
-     return FALSE;
+    if (sendmsg (conn->fd, &msg, MSG_NOSIGNAL) != (gint32) sizeof (h) + data_size)
+      return FALSE;
 
   conn->request_id = h.id;
 
@@ -362,8 +356,6 @@ mongo_packet_recv (mongo_connection *conn)
           return NULL;
         }
     }
-
-#if WITH_OPENSSL
   else
     {
       int c = 0;
@@ -384,7 +376,6 @@ mongo_packet_recv (mongo_connection *conn)
           return NULL;
         }
     }
-#endif
 
   h.length = GINT32_FROM_LE (h.length);
   h.id = GINT32_FROM_LE (h.id);
@@ -417,8 +408,6 @@ mongo_packet_recv (mongo_connection *conn)
           return NULL;
        }
     }
-
-#if WITH_OPENSSL
   else
     {
       int c = 0;
@@ -440,7 +429,6 @@ mongo_packet_recv (mongo_connection *conn)
           return NULL;
         }
     }
-#endif
 
   if (!mongo_wire_packet_set_data (p, data, size))
     {

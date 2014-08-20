@@ -135,9 +135,7 @@ test_env_setup (void)
   config.db = g_strdup ("test");
   config.coll = g_strdup ("libmongo");
 
-#if WITH_OPENSSL
   config.ssl_settings = g_new0 (mongo_ssl_ctx, 1);
-#endif
 
   if (getenv ("TEST_DB"))
     {
@@ -164,7 +162,6 @@ test_env_setup (void)
     mongo_util_parse_addr (getenv ("TEST_SECONDARY"), &config.secondary_host,
                            &config.secondary_port);
 
-#if WITH_OPENSSL
   /*mongo_ssl_util_init_lib();*/
   if (getenv ("SSL_CERT_PATH") && strlen (getenv ("SSL_CERT_PATH")) > 0)
     {
@@ -202,18 +199,17 @@ test_env_setup (void)
 
       if (getenv ("SSL_KEY_PATH") && strlen (getenv ("SSL_KEY_PATH")) >0)
         {
-         if (! mongo_ssl_set_key (config.ssl_settings, g_strdup (getenv ("SSL_KEY_PATH")), 
+         if (! mongo_ssl_set_key (config.ssl_settings, g_strdup (getenv ("SSL_KEY_PATH")),
                 g_strdup (getenv ("SSL_KEY_PW"))))
            {
              perror ("mongo_ssl_set_key");
              return FALSE;
            }
         }
-      else 
+      else
          return FALSE;
     }
-#endif
-  
+
   return TRUE;
 }
 
@@ -227,11 +223,9 @@ test_env_free (void)
   g_free (config.ns);
   g_free (config.gfs_prefix);
 
-#if WITH_OPENSSL
   mongo_ssl_clear (config.ssl_settings);
   g_free (config.ssl_settings);
   /*mongo_ssl_util_cleanup_lib();*/
-#endif
 }
 
 void

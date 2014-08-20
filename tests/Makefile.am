@@ -197,8 +197,6 @@ mongo_sync_gridfs_stream_unit_tests = \
 mongo_sync_gridfs_stream_func_tests = \
 		func/mongo/sync-gridfs-stream/f_sync_gridfs_stream
 
-
-if HAVE_OPENSSL
 mongo_ssl_unit_tests = \
 		unit/mongo/client/connect_ssl \
 		unit/mongo/client/packet_recv_ssl \
@@ -211,7 +209,6 @@ mongo_ssl_unit_tests = \
 
 mongo_ssl_func_tests = \
 		func/mongo/sync/f_ssl
-endif
 
 UNIT_TESTS	= ${bson_unit_tests} ${mongo_utils_unit_tests} \
 		${mongo_wire_unit_tests} ${mongo_client_unit_tests} \
