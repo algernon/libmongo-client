@@ -309,13 +309,9 @@ _mongo_sync_connect_replace (mongo_sync_connection *old,
 static gboolean
 _is_ssl (mongo_sync_connection *conn)
 {
-  //if (conn == NULL) return FALSE;
-  //if (conn->super == NULL) return FALSE;
-
   if (conn->super.ssl != NULL)
     if (conn->super.ssl->super != NULL)
         return TRUE;
-
 
   return FALSE;
 }

@@ -152,9 +152,7 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
   int err;
   gboolean conn_ok = FALSE;
   gboolean verify_ok = FALSE;
-  mongo_ssl_session_cache_entry *se = NULL;
-  gboolean reused_session = FALSE;
-  gchar *t = NULL;
+  gchar *target = NULL;
   mongo_ssl_verify_result rstat = MONGO_SSL_V_UNDEF;
   mongo_connection *conn;
 
@@ -170,15 +168,15 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
       return NULL;
     }
 
-  if ((bio = BIO_new_ssl_connect (conf->ctx)) == NULL)
+ if (!(bio = BIO_new_ssl_connect (conf->ctx)))
     goto error;
 
   BIO_get_ssl (bio, &ssl);
   if (!ssl)
     goto error;
 
-  t = g_strdup_printf ("%s:%d", host, port);
-  if (!BIO_set_conn_hostname (bio, t))
+  target = g_strdup_printf ("%s:%d", host, port);
+  if (!BIO_set_conn_hostname (bio, target))
     goto error;
 
   if (!SSL_set_tlsext_host_name (ssl, host))
@@ -191,8 +189,11 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
   if (SSL_connect (ssl) != 1)
     goto error;
 
+  /* callback mode
+   * (SSL_connect may fail on either socket error or protocol error)
+   */
   conn_ok = TRUE;
-  verify_ok = TRUE; /* callback mode (SSL_connect may fail on either socket error or protocol error) */
+  verify_ok = TRUE;
 
   conn = g_new0 (mongo_connection, 1);
   conn->fd = SSL_get_fd (ssl);
@@ -202,25 +203,23 @@ mongo_ssl_connect (const char *host, int port, mongo_ssl_ctx *conf)
   conn->ssl->verification_status = rstat;
   conn->ssl->super = conf;
 
-  g_free (t);
+  g_free (target);
 
   return conn;
 
 error:
-  g_free (t);
-
+  g_free (target);
   conf->last_ssl_error = ERR_peek_last_error ();
-
   if (verify_ok)
     conf->last_verify_result = MONGO_SSL_V_ERR_PROTO;
 
-  if (ssl != NULL)
+  if (!ssl)
     {
       if (conn_ok)
         SSL_shutdown (ssl);
       SSL_free (ssl);
     }
-  else if (bio != NULL)
+  else if (!bio)
     {
       BIO_free_all (bio);
     }
@@ -250,7 +249,7 @@ mongo_disconnect (mongo_connection *conn)
       return;
     }
 
-  if (conn->ssl != NULL)
+  if (conn->ssl)
     {
       SSL_shutdown (conn->ssl->conn);
       SSL_free (conn->ssl->conn);
@@ -268,6 +267,7 @@ mongo_packet_send (mongo_connection *conn, const mongo_packet *p)
 {
   const guint8 *data;
   gint32 data_size;
+  gint err = 0;
   mongo_packet_header h;
   struct iovec iov[2];
   struct msghdr msg;
@@ -309,17 +309,20 @@ mongo_packet_send (mongo_connection *conn, const mongo_packet *p)
 
   if (conn->ssl != NULL)
     {
-      gint err = 0;
-
-      if ( (err = BIO_write (conn->ssl->bio, iov[0].iov_base, (gint32) sizeof (h))) != (gint32) sizeof (h))
+      err = BIO_write (conn->ssl->bio, iov[0].iov_base, (gint32) sizeof (h));
+      if (err != (gint32) sizeof (h))
          return FALSE;
 
-      if ( (err = BIO_write (conn->ssl->bio, iov[1].iov_base, data_size)) != data_size)
+      err = BIO_write (conn->ssl->bio, iov[1].iov_base, data_size);
+      if (err != data_size)
         return FALSE;
     }
   else
-    if (sendmsg (conn->fd, &msg, MSG_NOSIGNAL) != (gint32) sizeof (h) + data_size)
-      return FALSE;
+    {
+      err = sendmsg (conn->fd, &msg, MSG_NOSIGNAL);
+      if (err != (gint32) sizeof (h) + data_size)
+        return FALSE;
+    }
 
   conn->request_id = h.id;
 
@@ -348,7 +351,7 @@ mongo_packet_recv (mongo_connection *conn)
 
   memset (&h, 0, sizeof (h));
 
-  if (conn->ssl == NULL)
+  if (!conn->ssl)
     {
       if (recv (conn->fd, &h, sizeof (mongo_packet_header),
                 MSG_NOSIGNAL | MSG_WAITALL) != sizeof (mongo_packet_header))
@@ -362,7 +365,8 @@ mongo_packet_recv (mongo_connection *conn)
 
       do
         {
-          int err = BIO_read (conn->ssl->bio, &h, sizeof (mongo_packet_header));
+          int err = BIO_read (conn->ssl->bio,
+                              &h, sizeof (mongo_packet_header));
 
           if (err > 0)
             c += err;
@@ -398,7 +402,8 @@ mongo_packet_recv (mongo_connection *conn)
 
   if (conn->ssl == NULL)
     {
-      if ((guint32)recv (conn->fd, data, size, MSG_NOSIGNAL | MSG_WAITALL) != size)
+      if ((guint32) recv (conn->fd, data, size,
+                          MSG_NOSIGNAL | MSG_WAITALL) != size)
         {
           int e = errno;
 
