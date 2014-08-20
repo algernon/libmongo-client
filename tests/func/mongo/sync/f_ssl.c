@@ -226,7 +226,7 @@ ssl_ping_success_thread (gpointer _c)
                                                         config.primary_port,
                                                         TRUE,
                                                         c);
-  ok (conn, "connection should succeed on a thread that does not initiate CRL check");
+  ok (conn != NULL, "connection should succeed on a thread that does not initiate CRL check");
   ok (mongo_sync_cmd_ping (conn), "ping should succeed on a thread that does not initiate CRL check");
   mongo_ssl_unlock (c);
   mongo_sync_disconnect (conn);

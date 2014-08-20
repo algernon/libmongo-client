@@ -141,45 +141,43 @@ mongo_ssl_init (mongo_ssl_ctx* c)
   c->session_cache = NULL;
   c->trusted_fingerprints = NULL;
   c->trusted_DNs = NULL;
+  c->cipher_list = g_strdup (HIGH_CIPHERS);
   c->trust_required = TRUE;
   c->cert_required = TRUE;
   c->last_verify_result = MONGO_SSL_V_UNDEF;
   c->last_verify_err_code = X509_V_OK;
 
+  c->last_ssl_error = 1;
+  c->ctx = SSL_CTX_new (SSLv23_client_method ());
+
   if (c->ctx == NULL)
     {
-      c->last_ssl_error = 1;
-      c->ctx = SSL_CTX_new (SSLv23_client_method ());
-
-      if (c->ctx == NULL)
-        {
-          c->last_ssl_error = ERR_peek_last_error ();
-          return FALSE;
-        }
-
-      SSL_CTX_set_options (c->ctx,
-                           SSL_OP_NO_SSLv2 |
-                           SSL_OP_NO_COMPRESSION |
-                           SSL_OP_ALL |
-                           SSL_OP_SINGLE_DH_USE |
-                           SSL_OP_EPHEMERAL_RSA);
-
-      if (!SSL_CTX_set_cipher_list (c->ctx, HIGH_CIPHERS))
-        {
-          c->last_ssl_error = ERR_peek_last_error ();
-          return FALSE;
-        }
-
-      if (!SSL_CTX_set_default_verify_paths (c->ctx))
-        {
-          c->last_ssl_error = ERR_peek_last_error ();
-          return FALSE;
-        }
-
-      SSL_CTX_set_verify (c->ctx, SSL_VERIFY_PEER, mongo_ssl_verify_callback);
-      mongo_ssl_set_verify_depth (c, MONGO_SSL_CERT_CHAIN_VERIFY_DEPTH);
-      mongo_ssl_set_auto_retry (c, TRUE);
+      c->last_ssl_error = ERR_peek_last_error ();
+      return FALSE;
     }
+
+  SSL_CTX_set_options (c->ctx,
+                       SSL_OP_NO_SSLv2 |
+                       SSL_OP_NO_COMPRESSION |
+                       SSL_OP_ALL |
+                       SSL_OP_SINGLE_DH_USE |
+                       SSL_OP_EPHEMERAL_RSA);
+
+  if (!SSL_CTX_set_cipher_list (c->ctx, HIGH_CIPHERS))
+    {
+      c->last_ssl_error = ERR_peek_last_error ();
+      return FALSE;
+    }
+
+  if (!SSL_CTX_set_default_verify_paths (c->ctx))
+    {
+      c->last_ssl_error = ERR_peek_last_error ();
+      return FALSE;
+    }
+
+  SSL_CTX_set_verify (c->ctx, SSL_VERIFY_PEER, mongo_ssl_verify_callback);
+  mongo_ssl_set_verify_depth (c, MONGO_SSL_CERT_CHAIN_VERIFY_DEPTH);
+  mongo_ssl_set_auto_retry (c, TRUE);
 
   return TRUE;
 }

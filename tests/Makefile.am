@@ -198,6 +198,7 @@ mongo_sync_gridfs_stream_func_tests = \
 		func/mongo/sync-gridfs-stream/f_sync_gridfs_stream
 
 mongo_ssl_unit_tests = \
+		unit/mongo/ssl/ssl_ctx \
 		unit/mongo/client/connect_ssl \
 		unit/mongo/client/packet_recv_ssl \
 		unit/mongo/client/packet_send_ssl \
