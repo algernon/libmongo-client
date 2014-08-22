@@ -696,9 +696,6 @@ check_altnames (const X509 *cert, const gchar *target_hostname)
                                                 curr->d.dNSName)) < 0)
             continue;
 
-          if (dns_len != strlen (dns))
-            continue;
-
           if (g_pattern_match_simple ((const gchar*) dns,
                                       (const gchar*) target_hostname_real))
             sni_match = TRUE;
