@@ -706,13 +706,12 @@ check_altnames (const X509 *cert, const gchar *target_hostname)
             }
         }
 
-      GENERAL_NAME_free (curr);
     }
+
+  sk_GENERAL_NAME_pop_free(names, GENERAL_NAME_free);
 
   if (target_hostname_real != target_hostname)
     g_free (target_hostname_real);
-
-  sk_GENERAL_NAME_free (names);
 
   return sni_match;
 }

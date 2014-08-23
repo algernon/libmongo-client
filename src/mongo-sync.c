@@ -297,6 +297,16 @@ _mongo_sync_connect_replace (mongo_sync_connection *old,
     close (old->super.fd);
 
   old->super.fd = new->super.fd;
+
+  if (old->super.ssl)
+    if (old->super.ssl != new->super.ssl)
+      {
+        if (old->super.ssl->bio)
+          BIO_free_all (old->super.ssl->bio);
+        else
+          SSL_free (old->super.ssl->conn);
+        g_free (old->super.ssl);
+      }
   old->super.ssl = new->super.ssl;
   old->super.request_id = -1;
   old->slaveok = new->slaveok;
@@ -356,7 +366,10 @@ mongo_sync_reconnect (mongo_sync_connection *conn,
       if (mongo_util_parse_addr (conn->rs.primary, &host, &port))
         {
           if (_is_ssl (conn))
-            nc = mongo_sync_ssl_connect (host, port, conn->slaveok, conn->super.ssl->super);
+            nc = mongo_sync_ssl_connect (host,
+                                         port,
+                                         conn->slaveok,
+                                         conn->super.ssl->super);
           else
             nc = mongo_sync_connect (host, port, conn->slaveok);
 
