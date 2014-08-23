@@ -217,12 +217,12 @@ error:
     {
       if (conn_ok)
         SSL_shutdown (ssl);
-      SSL_free (ssl);
     }
-  else if (!bio)
-    {
-      BIO_free_all (bio);
-    }
+
+  if (bio)
+    BIO_free_all (bio);
+  else
+    SSL_free (ssl);
 
   return NULL;
 }
@@ -252,7 +252,8 @@ mongo_disconnect (mongo_connection *conn)
   if (conn->ssl)
     {
       SSL_shutdown (conn->ssl->conn);
-      SSL_free (conn->ssl->conn);
+      BIO_free_all (conn->ssl->bio);
+      g_free (conn->ssl);
     }
 
   if (conn->fd >= 0)

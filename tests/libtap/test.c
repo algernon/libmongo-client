@@ -224,7 +224,6 @@ test_env_free (void)
 
   mongo_ssl_clear (config.ssl_settings);
   g_free (config.ssl_settings);
-  /*mongo_ssl_util_cleanup_lib();*/
 }
 
 void

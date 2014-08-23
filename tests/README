@@ -41,7 +41,9 @@ Please note, that 'make check' must be run from 'tests/'.
 
 Also, to make authentication succeed, you may create the test user like this:
 
-db.addUser({"user":"test","pwd":"s3kr1+","roles":[{"role":"dbOwner", "db":"test"}]
+db.addUser({"user":"test","pwd":"s3kr1+","roles":[{"role":"dbOwner", "db":"test"}]})
 
 For replica set tests, use the replSet parameter in your MongoDB configuration file.
+To properly deploy a replica set for testing, follow the MongoDB manual:
+http://docs.mongodb.org/manual/tutorial/deploy-replica-set-for-testing/
 

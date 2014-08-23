@@ -254,24 +254,21 @@ mongo_ssl_clear (mongo_ssl_ctx *c)
   __return_if_fail (c);
   __return_if_fail (c->ctx);
 
+  g_static_mutex_free (&c->__guard);
   SSL_CTX_free (c->ctx);
   c->ctx = NULL;
-
   g_free (c->ca_path);
   c->ca_path = NULL;
-
   g_free (c->cert_path);
   c->cert_path = NULL;
-
   g_free (c->key_path);
   c->key_path = NULL;
-
   g_free (c->key_pw);
   c->key_pw = NULL;
-
   g_free (c->cipher_list);
   c->cipher_list = NULL;
-
+  g_free (c->crl_path);
+  c->crl_path = NULL;
   c->trusted_DNs = NULL;
   c->trusted_fingerprints = NULL;
 }
@@ -687,27 +684,34 @@ check_altnames (const X509 *cert, const gchar *target_hostname)
 
   for (i = 0; i < num_names; ++i)
     {
-      const GENERAL_NAME *curr = sk_GENERAL_NAME_value (names, i);
+      GENERAL_NAME *curr = sk_GENERAL_NAME_value (names, i);
+      if (!curr)
+        continue;
+
       if (curr->type == GEN_DNS)
         {
           gchar *dns;
           int dns_len = -1;
           if ( (dns_len = ASN1_STRING_to_UTF8 ((unsigned char**) &dns,
-                                                curr->d.dNSName)) < 0)
-            continue;
+                                                curr->d.dNSName)) > 0)
+            {
+              if (g_pattern_match_simple ((const gchar*) dns,
+                                          (const gchar*) target_hostname_real))
+                sni_match = TRUE;
 
-          if (g_pattern_match_simple ((const gchar*) dns,
-                                      (const gchar*) target_hostname_real))
-            sni_match = TRUE;
+              OPENSSL_free (dns);
 
-          OPENSSL_free (dns);
-          if (sni_match)
-            break;
+              if (sni_match)
+                break;
+            }
         }
+
+      GENERAL_NAME_free (curr);
     }
 
   if (target_hostname_real != target_hostname)
     g_free (target_hostname_real);
+
   sk_GENERAL_NAME_free (names);
 
   return sni_match;
@@ -764,7 +768,7 @@ check_fingerprint (const X509* cert, const mongo_ssl_ctx *c)
 }
 
 static gchar *
-remove_unwanted_spaces(gchar *dn)
+remove_unwanted_spaces (gchar *dn)
 {
   gchar *ret = g_new0 (gchar, strlen(dn) + 1);
   gchar *src = dn;
@@ -773,9 +777,9 @@ remove_unwanted_spaces(gchar *dn)
 
   while (*src)
     {
-      if (!(isspace(*src) && comma))
+      if (!(isspace (*src) && comma))
         {
-          if (! ((!*(src + 1)) && (isspace(*src))) )
+          if (! ((!*(src + 1)) && (isspace (*src))) )
             *dst++ = *src;
         }
       comma = (*src == ',');
@@ -815,6 +819,7 @@ check_dn (const X509 *cert, const mongo_ssl_ctx *c)
       if (g_pattern_match_simple ((const gchar*) curr_dn_real, (const gchar*) _dn) ||
           g_pattern_match_simple ((const gchar*) curr_dn_real, (const gchar*) _dn_rev))
             {
+              g_free (curr_dn_real);
               match = TRUE;
               break;
             }

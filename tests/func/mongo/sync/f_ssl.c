@@ -83,6 +83,7 @@ test_func_mongo_sync_ssl_connect (void)
       "SSL connection works with trusted DN");
 
   mongo_ssl_set_trusted_DNs (config.ssl_settings, NULL);
+
   mongo_sync_disconnect (conn);
 }
 
@@ -92,7 +93,7 @@ test_func_mongo_sync_ssl_insert_query (void)
   mongo_sync_connection *conn = NULL;
   bson *test_doc = bson_new ();
   mongo_packet *p = NULL;
-  /*gchar *test_string =  g_strdup_printf ("%s:%s:%d", __FILE__, __func__, __LINE__);*/
+
   gchar *test_string = g_strdup ("test_func_mongo_sync_ssl_insert_query");
   bson_append_string (test_doc, test_string, "ok", -1);
   bson_finish (test_doc);
@@ -101,7 +102,7 @@ test_func_mongo_sync_ssl_insert_query (void)
                                  config.primary_port,
                                  TRUE,
                                  config.ssl_settings);
-  /*conn = mongo_sync_connect (config.primary_host, config.primary_port, TRUE);*/
+
   mongo_sync_conn_set_auto_reconnect (conn, TRUE);
 
   ok (conn != NULL, "connection works without whitelists");
@@ -121,10 +122,6 @@ test_func_mongo_sync_ssl_insert_query (void)
 
   ok (mongo_sync_cmd_delete (conn, config.ns, 0, test_doc) == TRUE,
       "automatic reconnection over SSL should work (at this time: attempting delete command)");
-
-  /* ok (mongo_sync_cmd_query (conn, config.ns, 0, 0, 1, test_doc, NULL) == NULL,
-        "test document should not exist after delete");
-  */
 
   mongo_sync_disconnect (conn);
   bson_free (test_doc);
@@ -177,6 +174,7 @@ ssl_query_thread (gpointer _c)
   guint tries;
   bson *test_doc = NULL;
   gchar *test_string;
+  mongo_packet *p = NULL;
   GThread *writer = g_thread_new ("insert", ssl_insert_thread, c);
   GThread *deleter;
   mongo_sync_connection *conn = mongo_sync_ssl_connect (config.primary_host,
@@ -187,14 +185,17 @@ ssl_query_thread (gpointer _c)
   g_thread_join (writer);
   sleep (1);
 
-  for(tries = 1; tries <= THREAD_POOL_SIZE; ++tries)
+  for (tries = 1; tries <= THREAD_POOL_SIZE; ++tries)
     {
       test_doc = bson_new ();
       test_string = g_strdup_printf ("%s:%d", "ssl_insert_thread", tries);
       bson_append_string (test_doc, test_string, "ok", -1);
       bson_finish (test_doc);
-      if (mongo_sync_cmd_query (conn, config.ns, 0, 0, 1, test_doc, NULL))
+      if ((p = mongo_sync_cmd_query (conn, config.ns, 0, 0, 1, test_doc, NULL)))
         {
+          mongo_wire_packet_free (p);
+          bson_free (test_doc);
+          g_free (test_string);
           success = TRUE;
           break;
         }
@@ -208,9 +209,7 @@ ssl_query_thread (gpointer _c)
   deleter = g_thread_new ("delete", ssl_delete_thread, conn);
 
   g_thread_join (deleter);
-  g_thread_unref (deleter);
   mongo_sync_disconnect (conn);
-  g_thread_unref (writer);
 
   return NULL;
 }
@@ -267,8 +266,6 @@ ssl_ping_thread (gpointer _c)
 
   g_thread_join (s);
   g_thread_join (f);
-  g_thread_unref (s);
-  g_thread_unref (f);
 
   return NULL;
 }
