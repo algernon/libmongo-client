@@ -308,7 +308,7 @@ mongo_packet_send (mongo_connection *conn, const mongo_packet *p)
   msg.msg_iov = iov;
   msg.msg_iovlen = 2;
 
-  if (conn->ssl != NULL)
+  if (conn->ssl)
     {
       err = BIO_write (conn->ssl->bio, iov[0].iov_base, (gint32) sizeof (h));
       if (err != (gint32) sizeof (h))

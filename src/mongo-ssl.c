@@ -26,6 +26,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <sys/stat.h>
+#include <netinet/in.h>
 
 #define HIGH_CIPHERS "HIGH:!EXPORT:!aNULL@STRENGTH"
 #define AES_CIPHERS "AES256-GCM-SHA384:AES256-SHA256:AES128-GCM-SHA384:AES128-SHA-256:AES256-SHA:AES128-SHA"
@@ -593,7 +594,7 @@ _get_dn (X509_NAME *name, GString *dn, gboolean reverse)
                       (reverse ? XN_FLAG_DN_REV : 0));
   len = BIO_get_mem_data (bio, &buf);
   g_string_truncate (dn, 0);
-  g_string_append_len (dn, buf, MIN(127, len));
+  g_string_append_len (dn, buf, MIN(255, len));
   BIO_free (bio);
 }
 
@@ -604,59 +605,31 @@ check_cn (const X509 *cert, const gchar *target_hostname)
   __return_val_if_fail (cert, FALSE);
   __return_val_if_fail (target_hostname, FALSE);
 
-  gboolean sni_match = FALSE;
-  int i = 0;
-  gchar **dn_parts;
-  gchar **fields;
-  gchar *curr_field, *curr_key, *curr_value;
-  gchar **field_parts;
-  GString *dn;
+  gboolean ret = FALSE;
+  X509_NAME *subject_name = X509_get_subject_name ((X509*) cert);
+  gint i = -1;
+  X509_NAME_ENTRY *curr_cn_ent;
+  ASN1_STRING *curr_cn_str;
+  gchar *curr_cn_str_real = NULL;
 
-  dn = g_string_sized_new (128);
-  _get_dn (X509_get_subject_name ((X509*) cert), dn, TRUE);
-
-  dn_parts = g_strsplit (dn->str, ",", 0);
-  curr_field = dn_parts[0];
-
-  gchar *_cn = g_locale_to_utf8 ("cn", -1, NULL, NULL, NULL);
-  gchar *_cni = g_utf8_casefold (_cn, -1);
-
-  while (curr_field)
+  while (TRUE)
     {
-      field_parts = g_strsplit (curr_field, "=", 2);
-      if (!field_parts[0] || !field_parts[1])
-        continue;
-
-      curr_key = g_strstrip (field_parts[0]);
-      curr_value = g_strstrip (field_parts[1]);
-
-      if (!curr_key || !curr_value)
-        continue;
-
-      gchar *curr_key_utf8 = g_utf8_casefold (curr_key, -1);
-      if (!strcmp ((const char*) curr_key_utf8, (const char*) _cni))
-        {
-          if (g_pattern_match_simple ((const gchar*) curr_value,
-                                      (const gchar*) target_hostname))
-            sni_match = TRUE;
-        }
-
-      g_strfreev (field_parts);
-      g_free (curr_key_utf8);
-
-      if (sni_match)
+      i = X509_NAME_get_index_by_NID (subject_name, NID_commonName, i);
+      if (i == -1)
         break;
+      curr_cn_ent = X509_NAME_get_entry (subject_name, i);
+      curr_cn_str = X509_NAME_ENTRY_get_data (curr_cn_ent);
+      if (curr_cn_str)
+        ASN1_STRING_to_UTF8 ((unsigned char**) &curr_cn_str_real, curr_cn_str);
+      ret = g_pattern_match_simple ((const gchar*) curr_cn_str_real,
+                                    (const gchar*) target_hostname);
 
-      i += 1;
-      curr_field = dn_parts[i];
+      OPENSSL_free (curr_cn_str_real);
+      if (ret)
+        break;
     }
 
-  g_strfreev (dn_parts);
-  g_string_free (dn, TRUE);
-  g_free (_cn);
-  g_free (_cni);
-
-  return sni_match;
+  return ret;
 }
 
 static gboolean
@@ -669,6 +642,7 @@ check_altnames (const X509 *cert, const gchar *target_hostname)
   gint i, num_names = -1;
   STACK_OF (GENERAL_NAME) *names = NULL;
   gboolean sni_match = FALSE;
+  gint target_hostname_real_len;
 
   names = X509_get_ext_d2i ((X509*) cert, NID_subject_alt_name, NULL, NULL);
 
@@ -679,8 +653,13 @@ check_altnames (const X509 *cert, const gchar *target_hostname)
 
   target_hostname_real =
     g_locale_to_utf8 (target_hostname, -1, NULL, NULL, NULL);
+  target_hostname_real_len = g_utf8_strlen (target_hostname_real, -1);
+
   if (!target_hostname_real)
-    target_hostname_real = (gchar*) target_hostname;
+    {
+      target_hostname_real = (gchar*) target_hostname;
+      target_hostname_real_len = strlen (target_hostname_real);
+    }
 
   for (i = 0; i < num_names; ++i)
     {
@@ -695,17 +674,24 @@ check_altnames (const X509 *cert, const gchar *target_hostname)
           if ( (dns_len = ASN1_STRING_to_UTF8 ((unsigned char**) &dns,
                                                 curr->d.dNSName)) > 0)
             {
-              if (g_pattern_match_simple ((const gchar*) dns,
-                                          (const gchar*) target_hostname_real))
-                sni_match = TRUE;
+              if (dns_len == target_hostname_real_len)
+                {
+                  sni_match = g_pattern_match_simple ((const gchar*) dns,
+                                              (const gchar*) target_hostname_real);
+                }
 
               OPENSSL_free (dns);
-
-              if (sni_match)
-                break;
             }
         }
+      else if (curr->type == GEN_IPADD)
+        {
+          gchar *ip = inet_ntoa (*(struct in_addr*) curr->d.iPAddress->data);
+          sni_match = g_pattern_match_simple ((const gchar*) ip,
+                                              (const gchar*) target_hostname_real);
+        }
 
+      if (sni_match)
+        break;
     }
 
   sk_GENERAL_NAME_pop_free(names, GENERAL_NAME_free);
@@ -801,9 +787,9 @@ check_dn (const X509 *cert, const mongo_ssl_ctx *c)
   gboolean match = FALSE;
 
   curr_dn = c->trusted_DNs;
-  dn = g_string_sized_new (128);
+  dn = g_string_sized_new (256);
   _get_dn (X509_get_subject_name ((X509*) cert), dn, FALSE);
-  dn_rev = g_string_sized_new (128);
+  dn_rev = g_string_sized_new (256);
   _get_dn (X509_get_subject_name ((X509*) cert), dn_rev, TRUE);
 
   _dn = g_utf8_casefold (dn->str, -1);
@@ -824,7 +810,6 @@ check_dn (const X509 *cert, const mongo_ssl_ctx *c)
             }
        g_free (curr_dn_real);
     }
-
 
   g_string_free (dn, TRUE);
   g_string_free (dn_rev, TRUE);
@@ -943,7 +928,7 @@ mongo_ssl_verify_callback (int preverify_ok, X509_STORE_CTX *store_ctx)
   ssl_ctx = (mongo_ssl_ctx *) SSL_get_app_data (ssl);
   depth = X509_STORE_CTX_get_error_depth (store_ctx);
 
-  __return_val_if_fail(ssl_ctx, 0);
+  __return_val_if_fail (ssl_ctx, 0);
 
   ssl_ctx->last_verify_err_code = err;
 
