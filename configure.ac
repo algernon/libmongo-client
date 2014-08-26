@@ -85,32 +85,19 @@ old_LIBS=$LIBS
 
 dnl to make sure we're using glib from the proper path
 LIBS=$GLIB_LIBS
-AC_CHECK_LIB(glib-2.0, g_checksum_new, [glib_checksum="yes"; with_openssl="0"], [glib_checksum="no"; with_openssl="1"])
+AC_CHECK_LIB(glib-2.0, g_checksum_new, [glib_checksum="yes"], [glib_checksum="no"])
 LIBS=$old_LIBS
 if test "x$glib_checksum" = "xno"; then
   dnl Using the compat stuff disables symbol versioning
   symbol_versioning=no
-  PKG_CHECK_MODULES(OPENSSL, openssl >= $OPENSSL_MIN_VERSION,, OPENSSL_LIBS="")
-  if test "x$OPENSSL_LIBS" = "x"; then
-     AC_MSG_ERROR([OpenSSL is required when glib-2.0 << 2.16.0])
-  fi
 fi
 
-
-AC_DEFINE_UNQUOTED(NO_GLIB_HASH_FUNCTIONS, $with_openssl, [Glib has no checksum functions])
-
-AC_ARG_WITH([ssl], [AS_HELP_STRING([--with-ssl], [Compile with SSL support (OpenSSL)])], [with_ssl_support="1"], [with_ssl_support="0"])
-
-if test "x$with_ssl_support" = "x1" -a "x$with_openssl" = "x0"; then 
-  PKG_CHECK_MODULES(OPENSSL, openssl >= $OPENSSL_MIN_VERSION,, OPENSSL_LIBS="")
-  if test "x$OPENSSL_LIBS" = "x"; then
-    AC_MSG_ERROR([OpenSSL is required when configured with --with-ssl])
-  fi
-  with_openssl="1"
+PKG_CHECK_MODULES(OPENSSL, openssl >= $OPENSSL_MIN_VERSION,, OPENSSL_LIBS="")
+if test "x$OPENSSL_LIBS" = "x"; then
+  AC_MSG_ERROR([OpenSSL is required])
 fi
 
-AC_DEFINE_UNQUOTED(WITH_OPENSSL, $with_openssl, [Compile with OpenSSL])
-AM_CONDITIONAL([HAVE_OPENSSL], [test $with_openssl -eq 1])
+AC_DEFINE_UNQUOTED(NO_GLIB_HASH_FUNCTIONS, $glib_checksum, [Glib has no checksum functions])
 
 dnl ***************************************************************************
 dnl misc features to be enabled
@@ -160,6 +147,7 @@ AC_CONFIG_FILES([Doxyfile
 	src/Makefile
 	src/libmongo-client.pc
 	tests/Makefile
+  tests/ssl/3party/Makefile
 	tests/libtap/Makefile
 ])
 AC_OUTPUT

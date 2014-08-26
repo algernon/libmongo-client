@@ -197,21 +197,19 @@ mongo_sync_gridfs_stream_unit_tests = \
 mongo_sync_gridfs_stream_func_tests = \
 		func/mongo/sync-gridfs-stream/f_sync_gridfs_stream
 
-
-if HAVE_OPENSSL
 mongo_ssl_unit_tests = \
+		unit/mongo/ssl/ssl_ctx \
+		unit/mongo/client/connect_ssl \
+		unit/mongo/client/packet_recv_ssl \
+		unit/mongo/client/packet_send_ssl \
 		unit/mongo/sync/sync_cmd_ping_ssl \
 		unit/mongo/sync/sync_cmd_delete_ssl \
 		unit/mongo/sync/sync_cmd_insert_ssl \
 		unit/mongo/sync/sync_reconnect_ssl \
-		unit/mongo/sync/sync_connect_cache_ssl \
-		unit/mongo/client/packet_recv_ssl \
-		unit/mongo/client/packet_send_ssl \
-		unit/mongo/client/connect_ssl
+		unit/mongo/sync/sync_connect_cache_ssl
 
 mongo_ssl_func_tests = \
 		func/mongo/sync/f_ssl
-endif
 
 UNIT_TESTS	= ${bson_unit_tests} ${mongo_utils_unit_tests} \
 		${mongo_wire_unit_tests} ${mongo_client_unit_tests} \
