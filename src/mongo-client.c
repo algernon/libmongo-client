@@ -23,6 +23,7 @@
 #include "bson.h"
 #include "mongo-wire.h"
 #include "libmongo-private.h"
+#include "libmongo-macros.h"
 
 #include <glib.h>
 
@@ -266,6 +267,7 @@ mongo_packet_recv (mongo_connection *conn)
     }
 
   size = h.length - sizeof (mongo_packet_header);
+  if (size < 0 || size > MAX_DATA_LEN) return NULL;
   data = g_new0 (guint8, size);
   if ((guint32)recv (conn->fd, data, size, MSG_NOSIGNAL | MSG_WAITALL) != size)
     {

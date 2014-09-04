@@ -270,7 +270,7 @@ bson_new_from_data (const guint8 *data, gint32 size)
 {
   bson *b;
 
-  if (!data || size <= 0)
+  if (!data || size <= 0 || size > MAX_DATA_LEN)
     return NULL;
 
   b = g_new0 (bson, 1);
