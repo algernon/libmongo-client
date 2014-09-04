@@ -657,6 +657,7 @@ _mongo_sync_packet_recv (mongo_sync_connection *conn, gint32 rid, gint32 flags)
   mongo_packet_header h;
   mongo_reply_packet_header rh;
 
+rerecv:
   p = mongo_packet_recv ((mongo_connection *)conn);
   if (!p)
     return NULL;
@@ -673,6 +674,8 @@ _mongo_sync_packet_recv (mongo_sync_connection *conn, gint32 rid, gint32 flags)
   if (h.resp_to != rid)
     {
       mongo_wire_packet_free (p);
+      if (h.resp_to < rid) goto rerecv;
+
       errno = EPROTO;
       return NULL;
     }
