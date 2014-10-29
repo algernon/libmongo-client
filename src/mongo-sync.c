@@ -563,6 +563,8 @@ _mongo_cmd_ensure_conn (mongo_sync_connection *conn,
           if (!mongo_sync_reconnect (conn, TRUE))
             return FALSE;
         }
+      g_free(conn->last_error);
+      conn->last_error = NULL;
       return TRUE;
     }
 
@@ -583,6 +585,8 @@ _mongo_cmd_ensure_conn (mongo_sync_connection *conn,
         }
     }
   errno = 0;
+  g_free(conn->last_error);
+  conn->last_error = NULL;
   return TRUE;
 }
 
