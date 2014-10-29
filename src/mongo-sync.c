@@ -224,12 +224,12 @@ mongo_sync_conn_seed_add (mongo_sync_connection *conn,
       errno = ENOTCONN;
       return FALSE;
     }
-  if (!host || port < 0) 
+  if (!host || port < 0)
     {
       errno = EINVAL;
       return FALSE;
     }
-  
+
   conn->rs.seeds = g_list_append (conn->rs.seeds,
                                   g_strdup_printf ("%s:%d", host, port));
 
@@ -324,6 +324,8 @@ mongo_sync_reconnect (mongo_sync_connection *conn,
                 mongo_sync_cmd_authenticate (conn, conn->auth.db,
                                              conn->auth.user,
                                              conn->auth.pw);
+              if (conn->super.timeout > 0)
+                mongo_connection_set_timeout(&conn->super, conn->super.timeout);
               return conn;
             }
         }
@@ -355,6 +357,9 @@ mongo_sync_reconnect (mongo_sync_connection *conn,
                                      conn->auth.user,
                                      conn->auth.pw);
 
+      if (conn->super.timeout > 0)
+        mongo_connection_set_timeout(&conn->super, conn->super.timeout);
+
       return conn;
     }
 
@@ -384,6 +389,9 @@ mongo_sync_reconnect (mongo_sync_connection *conn,
         mongo_sync_cmd_authenticate (conn, conn->auth.db,
                                      conn->auth.user,
                                      conn->auth.pw);
+
+      if (conn->super.timeout > 0)
+        mongo_connection_set_timeout(&conn->super, conn->super.timeout);
 
       return conn;
     }
@@ -1412,7 +1420,7 @@ mongo_sync_cmd_get_last_error (mongo_sync_connection *conn,
 
   if (!mongo_sync_cmd_get_last_error_full (conn, db, &err_bson))
     return FALSE;
-    
+
   if (!_mongo_sync_get_error (err_bson, error))
     {
       int e = errno;
@@ -2049,7 +2057,7 @@ mongo_sync_conn_recovery_cache *
 mongo_sync_conn_recovery_cache_new (void)
 {
   mongo_sync_conn_recovery_cache *cache;
-  
+
   cache = g_new0 (mongo_sync_conn_recovery_cache, 1);
 
   return cache;

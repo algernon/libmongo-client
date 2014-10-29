@@ -103,6 +103,7 @@ mongo_tcp_connect (const char *host, int port)
   setsockopt (fd, IPPROTO_TCP, TCP_NODELAY, (char *)&one, sizeof (one));
 
   conn = g_new0 (mongo_connection, 1);
+  conn->timeout = 0;
   conn->fd = fd;
 
   return conn;
@@ -245,7 +246,7 @@ mongo_packet_recv (mongo_connection *conn)
 
   memset (&h, 0, sizeof (h));
   if (recv (conn->fd, &h, sizeof (mongo_packet_header),
-            MSG_NOSIGNAL | MSG_WAITALL) != sizeof (mongo_packet_header))
+            MSG_NOSIGNAL) != sizeof (mongo_packet_header))
     {
       return NULL;
     }
@@ -269,7 +270,7 @@ mongo_packet_recv (mongo_connection *conn)
   size = h.length - sizeof (mongo_packet_header);
   if (size < 0 || size > MAX_DATA_LEN) return NULL;
   data = g_new0 (guint8, size);
-  if ((guint32)recv (conn->fd, data, size, MSG_NOSIGNAL | MSG_WAITALL) != size)
+  if ((guint32)recv (conn->fd, data, size, MSG_NOSIGNAL) != size)
     {
       int e = errno;
 
@@ -329,5 +330,8 @@ mongo_connection_set_timeout (mongo_connection *conn, gint timeout)
     return FALSE;
   if (setsockopt (conn->fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof (tv)) == -1)
     return FALSE;
+
+  conn->timeout = timeout;
+
   return TRUE;
 }
