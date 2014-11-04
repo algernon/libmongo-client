@@ -201,6 +201,10 @@ mongo_sync_connection *
 mongo_sync_connect (const gchar *address, gint port,
                     gboolean slaveok)
 {
+#ifndef GLIB_VERSION_2_32
+  if (!g_thread_supported()) g_thread_init(NULL);
+#endif
+
   return _recovery_cache_connect (NULL, address, port, slaveok);
 }
 
