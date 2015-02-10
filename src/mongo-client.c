@@ -224,6 +224,27 @@ mongo_packet_send (mongo_connection *conn, const mongo_packet *p)
   return TRUE;
 }
 
+ssize_t srecv(int fd, unsigned char *buf, size_t count, int flags)
+{
+    ssize_t rv, c;
+
+    c = 0;
+
+    while (c < count) {
+        rv = recv(fd, buf + c, count - c, flags);
+
+        if (rv == count)
+            return count;
+        else if (rv < 0)
+            return rv;
+        else if (rv == 0)
+            return c;
+
+        c += rv;
+    }
+    return count;
+}
+
 mongo_packet *
 mongo_packet_recv (mongo_connection *conn)
 {
@@ -245,8 +266,9 @@ mongo_packet_recv (mongo_connection *conn)
     }
 
   memset (&h, 0, sizeof (h));
-  if (recv (conn->fd, &h, sizeof (mongo_packet_header),
-            MSG_NOSIGNAL) != sizeof (mongo_packet_header))
+
+  if (srecv (conn->fd, (guint8*)&h, sizeof (mongo_packet_header), MSG_NOSIGNAL)
+      != sizeof (mongo_packet_header))
     {
       return NULL;
     }
@@ -270,7 +292,7 @@ mongo_packet_recv (mongo_connection *conn)
   size = h.length - sizeof (mongo_packet_header);
   if (size < 0 || size > MAX_DATA_LEN) return NULL;
   data = g_new0 (guint8, size);
-  if ((guint32)recv (conn->fd, data, size, MSG_NOSIGNAL) != size)
+  if ((guint32)srecv (conn->fd, data, size, MSG_NOSIGNAL) != size)
     {
       int e = errno;
 
