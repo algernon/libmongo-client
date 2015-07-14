@@ -23,6 +23,7 @@
 #include "bson.h"
 #include "mongo-wire.h"
 #include "libmongo-private.h"
+#include "libmongo-macros.h"
 
 #include <glib.h>
 
@@ -102,6 +103,7 @@ mongo_tcp_connect (const char *host, int port)
   setsockopt (fd, IPPROTO_TCP, TCP_NODELAY, (char *)&one, sizeof (one));
 
   conn = g_new0 (mongo_connection, 1);
+  conn->timeout = 0;
   conn->fd = fd;
 
   return conn;
@@ -222,6 +224,27 @@ mongo_packet_send (mongo_connection *conn, const mongo_packet *p)
   return TRUE;
 }
 
+ssize_t srecv(int fd, unsigned char *buf, size_t count, int flags)
+{
+    ssize_t rv, c;
+
+    c = 0;
+
+    while (c < count) {
+        rv = recv(fd, buf + c, count - c, flags);
+
+        if (rv == count)
+            return count;
+        else if (rv < 0)
+            return rv;
+        else if (rv == 0)
+            return c;
+
+        c += rv;
+    }
+    return count;
+}
+
 mongo_packet *
 mongo_packet_recv (mongo_connection *conn)
 {
@@ -243,8 +266,9 @@ mongo_packet_recv (mongo_connection *conn)
     }
 
   memset (&h, 0, sizeof (h));
-  if (recv (conn->fd, &h, sizeof (mongo_packet_header),
-            MSG_NOSIGNAL | MSG_WAITALL) != sizeof (mongo_packet_header))
+
+  if (srecv (conn->fd, (guint8*)&h, sizeof (mongo_packet_header), MSG_NOSIGNAL)
+      != sizeof (mongo_packet_header))
     {
       return NULL;
     }
@@ -266,8 +290,9 @@ mongo_packet_recv (mongo_connection *conn)
     }
 
   size = h.length - sizeof (mongo_packet_header);
+  if (size < 0 || size > MAX_DATA_LEN) return NULL;
   data = g_new0 (guint8, size);
-  if ((guint32)recv (conn->fd, data, size, MSG_NOSIGNAL | MSG_WAITALL) != size)
+  if ((guint32)srecv (conn->fd, data, size, MSG_NOSIGNAL) != size)
     {
       int e = errno;
 
@@ -327,5 +352,8 @@ mongo_connection_set_timeout (mongo_connection *conn, gint timeout)
     return FALSE;
   if (setsockopt (conn->fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof (tv)) == -1)
     return FALSE;
+
+  conn->timeout = timeout;
+
   return TRUE;
 }

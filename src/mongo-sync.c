@@ -201,6 +201,10 @@ mongo_sync_connection *
 mongo_sync_connect (const gchar *address, gint port,
                     gboolean slaveok)
 {
+#ifndef GLIB_VERSION_2_32
+  if (!g_thread_supported()) g_thread_init(NULL);
+#endif
+
   return _recovery_cache_connect (NULL, address, port, slaveok);
 }
 
@@ -224,12 +228,12 @@ mongo_sync_conn_seed_add (mongo_sync_connection *conn,
       errno = ENOTCONN;
       return FALSE;
     }
-  if (!host || port < 0) 
+  if (!host || port < 0)
     {
       errno = EINVAL;
       return FALSE;
     }
-  
+
   conn->rs.seeds = g_list_append (conn->rs.seeds,
                                   g_strdup_printf ("%s:%d", host, port));
 
@@ -324,6 +328,8 @@ mongo_sync_reconnect (mongo_sync_connection *conn,
                 mongo_sync_cmd_authenticate (conn, conn->auth.db,
                                              conn->auth.user,
                                              conn->auth.pw);
+              if (conn->super.timeout > 0)
+                mongo_connection_set_timeout(&conn->super, conn->super.timeout);
               return conn;
             }
         }
@@ -355,6 +361,9 @@ mongo_sync_reconnect (mongo_sync_connection *conn,
                                      conn->auth.user,
                                      conn->auth.pw);
 
+      if (conn->super.timeout > 0)
+        mongo_connection_set_timeout(&conn->super, conn->super.timeout);
+
       return conn;
     }
 
@@ -384,6 +393,9 @@ mongo_sync_reconnect (mongo_sync_connection *conn,
         mongo_sync_cmd_authenticate (conn, conn->auth.db,
                                      conn->auth.user,
                                      conn->auth.pw);
+
+      if (conn->super.timeout > 0)
+        mongo_connection_set_timeout(&conn->super, conn->super.timeout);
 
       return conn;
     }
@@ -555,6 +567,8 @@ _mongo_cmd_ensure_conn (mongo_sync_connection *conn,
           if (!mongo_sync_reconnect (conn, TRUE))
             return FALSE;
         }
+      g_free(conn->last_error);
+      conn->last_error = NULL;
       return TRUE;
     }
 
@@ -575,6 +589,8 @@ _mongo_cmd_ensure_conn (mongo_sync_connection *conn,
         }
     }
   errno = 0;
+  g_free(conn->last_error);
+  conn->last_error = NULL;
   return TRUE;
 }
 
@@ -657,6 +673,7 @@ _mongo_sync_packet_recv (mongo_sync_connection *conn, gint32 rid, gint32 flags)
   mongo_packet_header h;
   mongo_reply_packet_header rh;
 
+rerecv:
   p = mongo_packet_recv ((mongo_connection *)conn);
   if (!p)
     return NULL;
@@ -673,6 +690,8 @@ _mongo_sync_packet_recv (mongo_sync_connection *conn, gint32 rid, gint32 flags)
   if (h.resp_to != rid)
     {
       mongo_wire_packet_free (p);
+      if (h.resp_to < rid) goto rerecv;
+
       errno = EPROTO;
       return NULL;
     }
@@ -1409,7 +1428,7 @@ mongo_sync_cmd_get_last_error (mongo_sync_connection *conn,
 
   if (!mongo_sync_cmd_get_last_error_full (conn, db, &err_bson))
     return FALSE;
-    
+
   if (!_mongo_sync_get_error (err_bson, error))
     {
       int e = errno;
@@ -2046,7 +2065,7 @@ mongo_sync_conn_recovery_cache *
 mongo_sync_conn_recovery_cache_new (void)
 {
   mongo_sync_conn_recovery_cache *cache;
-  
+
   cache = g_new0 (mongo_sync_conn_recovery_cache, 1);
 
   return cache;

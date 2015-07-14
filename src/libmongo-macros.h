@@ -19,6 +19,8 @@
 
 #include <glib.h>
 
+#define MAX_DATA_LEN 32505856
+
 inline static gdouble
 GDOUBLE_SWAP_LE_BE(gdouble in)
 {
